@@ -1,0 +1,23 @@
+# =====================================================================
+#  docker-compose — development.
+#  One command to run the app: `docker compose up`.
+#  - Bind-mounts your source into the container for hot-reload.
+#  - Keeps the container's node_modules separate (anonymous volume) so
+#    your host's OS/arch never clashes with the container's installed deps.
+# =====================================================================
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"        # host:container — open http://localhost:5173
+    volumes:
+      - .:/app             # live source -> instant reload
+      - /app/node_modules  # anonymous volume: use the container's deps, not the host's
+    environment:
+      # Vite needs polling to detect file changes on some Docker setups
+      # (notably Windows/WSL and macOS bind mounts).
+      - CHOKIDAR_USEPOLLING=true
+      # Point this at your C# API's ngrok tunnel when the backend is ready.
+      # - VITE_API_URL=https://your-subdomain.ngrok-free.app

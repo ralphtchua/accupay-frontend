@@ -1,0 +1,146 @@
+/* =====================================================================
+   Global base + shared component classes.
+   Mirrors the prototype's <style> block and the inline patterns that
+   repeat across screens (cards, chips, inputs, toggles, buttons).
+   ===================================================================== */
+
+@import './tokens.css';
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--ao-font);
+  -webkit-font-smoothing: antialiased;
+  color: var(--ao-text);
+  background: var(--ao-bg);
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--ao-primary) !important;
+  background: #fff !important;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #cdd3db; border-radius: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Accessibility floor: visible keyboard focus + reduced motion */
+:focus-visible { outline: 2px solid var(--ao-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* ---- Card ---------------------------------------------------------- */
+.ao-card {
+  background: var(--ao-surface);
+  border: 1px solid var(--ao-border);
+  border-radius: var(--ao-r-xl);
+  box-shadow: var(--ao-shadow-card);
+}
+
+/* ---- Status chip --------------------------------------------------- */
+.ao-chip {
+  display: inline-block;
+  font: 700 9px var(--ao-font-mono);
+  padding: 4px 8px;
+  border-radius: 5px;
+  letter-spacing: .4px;
+  white-space: nowrap;
+}
+.ao-chip--approved { color: var(--ao-success); background: var(--ao-success-bg); }
+.ao-chip--pending  { color: var(--ao-pending); background: var(--ao-pending-bg); }
+.ao-chip--declined { color: var(--ao-danger);  background: var(--ao-danger-bg); }
+.ao-chip--added    { color: var(--ao-info);    background: var(--ao-info-bg); }
+.ao-chip--active   { color: var(--ao-success); background: var(--ao-success-bg); }
+.ao-chip--default  { color: var(--ao-text-3);  background: var(--ao-border-soft); }
+
+/* ---- Primary button ------------------------------------------------ */
+.ao-btn {
+  border: none;
+  cursor: pointer;
+  border-radius: var(--ao-r-md);
+  font: 700 14px var(--ao-font);
+  transition: background .15s;
+}
+.ao-btn--primary { background: var(--ao-primary); color: #fff; }
+.ao-btn--primary:hover { background: var(--ao-primary-hover); }
+.ao-btn--success { background: var(--ao-success); color: #fff; }
+.ao-btn--danger  { background: var(--ao-danger);  color: #fff; }
+.ao-btn--ghost {
+  background: #fff; color: var(--ao-text-3);
+  border: 1px solid var(--ao-border-strong);
+}
+.ao-btn--ghost:hover { background: var(--ao-surface-muted); }
+
+/* ---- Input / select / textarea ------------------------------------ */
+.ao-input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--ao-border-strong);
+  border-radius: var(--ao-r-md);
+  background: var(--ao-surface-muted);
+  padding: 0 12px;
+  font: 14px var(--ao-font);
+  color: var(--ao-text);
+  outline: none;
+}
+.ao-label {
+  display: block;
+  font: 600 12px var(--ao-font);
+  color: var(--ao-text-3);
+  margin-bottom: 6px;
+}
+
+/* ---- Info callout -------------------------------------------------- */
+.ao-callout {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  background: var(--ao-surface-soft);
+  border: 1px solid var(--ao-border-info);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font: 400 12px/1.5 var(--ao-font);
+  color: #3a4a6b;
+}
+
+/* ---- Toast --------------------------------------------------------- */
+.ao-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ao-text);
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: 11px;
+  font: 600 13px var(--ao-font);
+  box-shadow: var(--ao-shadow-toast);
+  z-index: 60;
+  animation: ao-toast-in .18s ease-out;
+}
+@keyframes ao-toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---- Modal --------------------------------------------------------- */
+.ao-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(16, 32, 46, .45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 70; padding: 24px;
+  animation: ao-fade .15s ease-out;
+}
+.ao-modal {
+  background: #fff;
+  border-radius: var(--ao-r-xl);
+  box-shadow: var(--ao-shadow-modal);
+  padding: 26px;
+}
+@keyframes ao-fade { from { opacity: 0; } to { opacity: 1; } }

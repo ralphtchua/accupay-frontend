@@ -1,0 +1,27 @@
+# =====================================================================
+#  Development image — Node 24 LTS (Active LTS as of 2026).
+#  Runs the Vite dev server with hot-reload. Source is bind-mounted via
+#  docker-compose, so edits on your machine reload instantly in the
+#  container. You do NOT need Node installed on your host.
+# =====================================================================
+FROM node:24-alpine
+
+# App lives here inside the container.
+WORKDIR /app
+
+# Install dependencies first so this layer is cached unless the
+# package manifests change (fast rebuilds).
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Copy the rest of the source. In dev, compose overlays this with a
+# bind-mount so your live files win — this COPY is just a sane default
+# if the image is run without the mount.
+COPY . .
+
+# Vite dev server port.
+EXPOSE 5173
+
+# --host makes Vite listen on 0.0.0.0 so the port is reachable from
+# outside the container (localhost on your machine).
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

@@ -1,0 +1,1073 @@
+openapi: 3.1.0
+info:
+  title: Access Offshoring — Time & Attendance API
+  version: 0.1.0
+  description: >
+    REST contract for the Access Offshoring Time & Attendance / Payroll system.
+    Endpoints are derived from the MySQL schema (access_offshoring_schema.sql)
+    and the React app's data layer (src/lib/api.ts). Response shapes mirror
+    src/types/domain.ts so the frontend can swap its mock layer for these
+    endpoints with no component changes.
+
+    Conventions:
+      * JSON request/response bodies (application/json).
+      * Authentication via Bearer JWT in the Authorization header,
+        except for /auth/login.
+      * IDs are strings (the DB uses BIGINT; serialize as string to avoid
+        JS precision loss).
+      * Dates are ISO-8601 'YYYY-MM-DD'; times are 'HH:mm' (24h);
+        timestamps are RFC-3339.
+      * List endpoints return an envelope { data, total } for forward
+        compatibility with pagination.
+      * Errors use a consistent Problem shape (see components.schemas.Error).
+
+servers:
+  - url: http://localhost:5000
+    description: Local ASP.NET Core (Kestrel)
+  - url: https://YOUR-SUBDOMAIN.ngrok-free.app
+    description: ngrok tunnel exposing the local API to the frontend
+
+tags:
+  - name: Auth
+    description: Sign in, current user, password management
+  - name: Time
+    description: Check in/out and raw time entries
+  - name: Filings
+    description: Time-log, overtime, and leave filings + approvals
+  - name: Leave
+    description: Leave balances and leave types
+  - name: Dashboard
+    description: Aggregated dashboard data
+  - name: Employees
+    description: Employee directory and per-employee admin
+  - name: Admin
+    description: Roles, permissions, employee types, clients, settings
+  - name: Accupay
+    description: Payroll integration sync
+
+security:
+  - bearerAuth: []
+
+# =====================================================================
+#  PATHS
+# =====================================================================
+paths:
+
+  # ---- AUTH ---------------------------------------------------------
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in with email and password
+      security: []   # public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Authenticated; returns a token and the current user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the currently signed-in user
+      responses:
+        '200':
+          description: The current user and active view group.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUser' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change your own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: Password changed. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---- DASHBOARD ----------------------------------------------------
+  /api/dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard stats for the current user
+      description: >
+        Backs the three stat cards (this week, overtime, pending). The
+        recent-activity list uses GET /api/filings/mine.
+      responses:
+        '200':
+          description: Dashboard stats.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardStats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---- TIME ---------------------------------------------------------
+  /api/time/status:
+    get:
+      tags: [Time]
+      summary: Current check-in status for the user
+      responses:
+        '200':
+          description: Whether the user is currently checked in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/time/check-in:
+    post:
+      tags: [Time]
+      summary: Check in (start a shift)
+      responses:
+        '200':
+          description: Checked in; returns the new status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckStatus' }
+        '409':
+          description: Already checked in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/time/check-out:
+    post:
+      tags: [Time]
+      summary: Check out (end a shift)
+      responses:
+        '200':
+          description: Checked out; returns the new status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckStatus' }
+        '409':
+          description: Not currently checked in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/time/entries:
+    get:
+      tags: [Time]
+      summary: List the current user's time entries
+      description: Backs the Time Logs screen. Optional date-range filter.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date }, description: 'Inclusive start date (YYYY-MM-DD).' }
+        - { name: to,   in: query, schema: { type: string, format: date }, description: 'Inclusive end date (YYYY-MM-DD).' }
+      responses:
+        '200':
+          description: Time entries, most recent first.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/TimeEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---- FILINGS ------------------------------------------------------
+  /api/filings/mine:
+    get:
+      tags: [Filings]
+      summary: List the current user's filings
+      description: Backs My Requests and the dashboard activity list.
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/FilingStatus' } }
+        - { name: kind,   in: query, schema: { $ref: '#/components/schemas/FilingKind' } }
+      responses:
+        '200':
+          description: Filings, most recent first.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Filing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/filings/timelog:
+    post:
+      tags: [Filings]
+      summary: File a missed Time In / Time Out
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTimeLogFiling' }
+      responses:
+        '201':
+          description: Filing created (Pending) and routed to approvers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Filing' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/filings/overtime:
+    post:
+      tags: [Filings]
+      summary: File overtime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOvertimeFiling' }
+      responses:
+        '201':
+          description: Overtime filing created (Pending).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Filing' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/filings/leave:
+    post:
+      tags: [Filings]
+      summary: File leave (full-day or hourly)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLeaveFiling' }
+      responses:
+        '201':
+          description: Leave filing created (Pending).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Filing' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/filings/pending:
+    get:
+      tags: [Filings]
+      summary: Approvals inbox — filings awaiting the current approver
+      description: >
+        Returns filings routed to the current user as an approver and still
+        Pending. Backs the Approvals screen.
+      responses:
+        '200':
+          description: Pending filings to approve.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Filing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/filings/history:
+    get:
+      tags: [Filings]
+      summary: Approval history — decided filings
+      description: Filings the current approver has decided (Approved/Declined).
+      responses:
+        '200':
+          description: Decided filings.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Filing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/filings/{id}/approve:
+    post:
+      tags: [Filings]
+      summary: Approve a filing
+      parameters: [ { $ref: '#/components/parameters/FilingId' } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionRequest' }
+      responses:
+        '200':
+          description: Filing approved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Filing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Filing is not in a Pending state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/filings/{id}/decline:
+    post:
+      tags: [Filings]
+      summary: Decline a filing
+      parameters: [ { $ref: '#/components/parameters/FilingId' } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionRequest' }
+      responses:
+        '200':
+          description: Filing declined.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Filing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Filing is not in a Pending state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ---- LEAVE --------------------------------------------------------
+  /api/leave/balances:
+    get:
+      tags: [Leave]
+      summary: Current user's leave balances
+      responses:
+        '200':
+          description: Leave balances by type.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LeaveBalance' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/leave/types:
+    get:
+      tags: [Leave]
+      summary: List leave types
+      responses:
+        '200':
+          description: Active leave types and their accrual config.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LeaveType' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Admin]
+      summary: Create a leave type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveTypeUpsert' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveType' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/leave/types/{id}:
+    put:
+      tags: [Admin]
+      summary: Update a leave type (incl. accrual config)
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaveTypeUpsert' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeaveType' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- EMPLOYEES ----------------------------------------------------
+  /api/employees:
+    get:
+      tags: [Employees]
+      summary: List / search employees (directory)
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: 'Search by name or email.' }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/EmployeeStatus' } }
+      responses:
+        '200':
+          description: Employees.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Employee' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Employees]
+      summary: Create an employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmployeeUpsert' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Employee' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/employees/{id}:
+    get:
+      tags: [Employees]
+      summary: Get one employee (detail view)
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      responses:
+        '200':
+          description: Employee detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Employee' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Employees]
+      summary: Update an employee
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmployeeUpsert' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Employee' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/employees/{id}/role:
+    put:
+      tags: [Employees]
+      summary: Change an employee's role
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleId]
+              properties:
+                roleId: { type: string }
+      responses:
+        '200':
+          description: Role changed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Employee' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/employees/{id}/approvers:
+    get:
+      tags: [Employees]
+      summary: Get an employee's approvers by filing type
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      responses:
+        '200':
+          description: Approver emails grouped by filing type.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApproverGroups' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Employees]
+      summary: Replace an employee's approvers by filing type
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApproverGroups' }
+      responses:
+        '200':
+          description: Updated approver groups.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApproverGroups' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/employees/{id}/reset-password:
+    post:
+      tags: [Employees]
+      summary: Admin reset of an employee's password
+      description: >
+        Sets a new password and flags the account to require a change at
+        next sign-in. Returns no password material in the response.
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        '204': { description: Password reset; user must change at next login. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---- ADMIN: reference data ----------------------------------------
+  /api/employee-types:
+    get:
+      tags: [Admin]
+      summary: List employee types (customizable)
+      responses:
+        '200':
+          description: Employee types.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EmployeeType' }
+    post:
+      tags: [Admin]
+      summary: Create an employee type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                sortOrder: { type: integer }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmployeeType' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/clients:
+    get:
+      tags: [Admin]
+      summary: List clients
+      responses:
+        '200':
+          description: Clients.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Client' }
+
+  /api/roles:
+    get:
+      tags: [Admin]
+      summary: List roles
+      responses:
+        '200':
+          description: Roles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Role' }
+
+  /api/roles/{id}/permissions:
+    get:
+      tags: [Admin]
+      summary: Get the screen-permission matrix for a role
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      responses:
+        '200':
+          description: Permissions for the role.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RolePermission' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin]
+      summary: Replace the screen-permission matrix for a role
+      parameters: [ { $ref: '#/components/parameters/GenericId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/RolePermission' }
+      responses:
+        '200':
+          description: Updated permissions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RolePermission' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/settings:
+    get:
+      tags: [Admin]
+      summary: Get system settings
+      responses:
+        '200':
+          description: Key/value system settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+    put:
+      tags: [Admin]
+      summary: Update system settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Settings' }
+      responses:
+        '200':
+          description: Updated settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---- ACCUPAY ------------------------------------------------------
+  /api/accupay/status:
+    get:
+      tags: [Accupay]
+      summary: Accupay connection + last-sync status
+      responses:
+        '200':
+          description: Integration status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccupayStatus' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/accupay/sync:
+    post:
+      tags: [Accupay]
+      summary: Trigger a payroll sync
+      description: >
+        Pushes approved, unsynced filings/time entries to Accupay. Returns a
+        sync-run summary. Safe to call repeatedly; only unsynced records go.
+      responses:
+        '202':
+          description: Sync started/completed; returns the run summary.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccupaySyncRun' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Integration not connected.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+# =====================================================================
+#  COMPONENTS
+# =====================================================================
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    FilingId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: Filing ID.
+    GenericId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: Resource ID.
+
+  responses:
+    BadRequest:
+      description: Validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated but not permitted.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    # ---- Shared ----
+    Error:
+      type: object
+      description: Problem detail (RFC-7807-ish).
+      required: [status, title]
+      properties:
+        status: { type: integer, examples: [400] }
+        title:  { type: string, examples: ['Validation failed'] }
+        detail: { type: string, examples: ['Reason is required.'] }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: Field-level validation messages.
+
+    ListEnvelope:
+      type: object
+      properties:
+        data: { type: array, items: {} }
+        total: { type: integer, description: Total matching records. }
+      required: [data, total]
+
+    # ---- Enums (mirror DB ENUMs + TS unions) ----
+    FilingKind:
+      type: string
+      enum: [TimeLog, Overtime, Leave]
+    FilingStatus:
+      type: string
+      enum: [Pending, Approved, Declined]
+    TimeLogSubtype:
+      type: string
+      enum: ['TIME IN', 'TIME OUT']
+    EmployeeStatus:
+      type: string
+      enum: [Pending, Active, Suspended, Archived]
+    TimeEntryKind:
+      type: string
+      enum: [standard, added, overtime]
+    TimeEntryStatus:
+      type: string
+      enum: [Logged, Pending, Approved, Declined]
+    ViewGroup:
+      type: string
+      enum: [employee, approver, admin]
+    LeaveTiming:
+      type: string
+      enum: [Day, Hour]
+    AccrualMethod:
+      type: string
+      enum: [annual_grant, monthly]
+
+    # ---- Auth ----
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string, description: JWT bearer token. }
+        user: { $ref: '#/components/schemas/CurrentUser' }
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string }
+        newPassword: { type: string, minLength: 8 }
+    CurrentUser:
+      type: object
+      required: [employee, viewGroup]
+      properties:
+        employee: { $ref: '#/components/schemas/Employee' }
+        viewGroup: { $ref: '#/components/schemas/ViewGroup' }
+        permissions:
+          type: array
+          items: { type: string }
+          description: Permission codes granted to the user's role.
+
+    # ---- Dashboard ----
+    DashboardStats:
+      type: object
+      required: [weekHours, overtimeHours, pendingCount]
+      properties:
+        weekHours: { type: string, examples: ['31.5 h'] }
+        overtimeHours: { type: string, examples: ['2.0 h'] }
+        pendingCount: { type: integer, examples: [3] }
+
+    # ---- Time ----
+    CheckStatus:
+      type: object
+      required: [checkedIn]
+      properties:
+        checkedIn: { type: boolean }
+        checkInTime:
+          type: ['string', 'null']
+          description: 'Time of the active check-in (HH:mm), if checked in.'
+    TimeEntry:
+      type: object
+      required: [id, employeeId, workDate, kind, status]
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        workDate: { type: string, format: date }
+        timeIn:  { type: ['string', 'null'], examples: ['08:00'] }
+        timeOut: { type: ['string', 'null'], examples: ['17:00'] }
+        hours:   { type: ['number', 'null'], examples: [8.0] }
+        kind: { $ref: '#/components/schemas/TimeEntryKind' }
+        status: { $ref: '#/components/schemas/TimeEntryStatus' }
+
+    # ---- Filings ----
+    Filing:
+      type: object
+      required: [id, employeeId, employeeName, kind, filingDate, reason, status]
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        employeeName: { type: string }
+        kind: { $ref: '#/components/schemas/FilingKind' }
+        timelogSubtype: { $ref: '#/components/schemas/TimeLogSubtype' }
+        leaveType: { type: string, description: 'Present when kind=Leave.' }
+        filingDate: { type: string, format: date }
+        startTime: { type: string, examples: ['08:00'] }
+        endTime:   { type: string, examples: ['17:00'] }
+        days:  { type: number, examples: [1] }
+        hours: { type: number, examples: [2.5] }
+        reason: { type: string }
+        status: { $ref: '#/components/schemas/FilingStatus' }
+    CreateTimeLogFiling:
+      type: object
+      required: [subtype, date, time, reason]
+      properties:
+        subtype: { $ref: '#/components/schemas/TimeLogSubtype' }
+        date: { type: string, format: date }
+        time: { type: string, examples: ['08:00'] }
+        reason: { type: string, minLength: 1 }
+    CreateOvertimeFiling:
+      type: object
+      required: [date, hours, from, to, reason]
+      properties:
+        date: { type: string, format: date }
+        hours: { type: number, examples: [2.5] }
+        from: { type: string, examples: ['17:00'] }
+        to:   { type: string, examples: ['18:30'] }
+        reason: { type: string, minLength: 1 }
+    CreateLeaveFiling:
+      type: object
+      required: [leaveType, timing, reason]
+      properties:
+        leaveType: { type: string, examples: ['Vacation'] }
+        timing: { $ref: '#/components/schemas/LeaveTiming' }
+        from: { type: string, format: date, description: 'Day timing: start date.' }
+        to:   { type: string, format: date, description: 'Day timing: end date.' }
+        date: { type: string, format: date, description: 'Hour timing: the single day.' }
+        start: { type: string, description: 'Hour timing: start time (HH:mm).' }
+        end:   { type: string, description: 'Hour timing: end time (HH:mm).' }
+        reason: { type: string, minLength: 1 }
+    DecisionRequest:
+      type: object
+      properties:
+        note: { type: string, description: 'Optional approver note.' }
+
+    # ---- Leave ----
+    LeaveBalance:
+      type: object
+      required: [leaveType, usedDays, entitledDays, hoursLeft]
+      properties:
+        leaveType: { type: string }
+        usedDays: { type: number }
+        entitledDays: { type: number }
+        hoursLeft: { type: number }
+    LeaveType:
+      type: object
+      required: [id, name, accrualMethod, defaultDays]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        accrualMethod: { $ref: '#/components/schemas/AccrualMethod' }
+        defaultDays: { type: number }
+        accrualRateDays: { type: number, description: 'Days earned per month (monthly).' }
+        maxAccrualDays: { type: ['number', 'null'] }
+        carryOver: { type: boolean }
+        isActive: { type: boolean }
+    LeaveTypeUpsert:
+      type: object
+      required: [name, accrualMethod]
+      properties:
+        name: { type: string }
+        accrualMethod: { $ref: '#/components/schemas/AccrualMethod' }
+        defaultDays: { type: number }
+        accrualRateDays: { type: number }
+        maxAccrualDays: { type: ['number', 'null'] }
+        carryOver: { type: boolean }
+        isActive: { type: boolean }
+
+    # ---- Employees ----
+    Employee:
+      type: object
+      required: [id, empCode, name, roleName, employeeType, email, status]
+      properties:
+        id: { type: string }
+        empCode: { type: string, examples: ['AO-00481'] }
+        name: { type: string }
+        title: { type: ['string', 'null'] }
+        clientName: { type: ['string', 'null'] }
+        roleName: { type: string }
+        employeeType: { type: string }
+        email: { type: string, format: email }
+        phone: { type: ['string', 'null'] }
+        status: { $ref: '#/components/schemas/EmployeeStatus' }
+        dateHired: { type: ['string', 'null'], format: date }
+        approvers: { $ref: '#/components/schemas/ApproverGroups' }
+    EmployeeUpsert:
+      type: object
+      required: [firstName, lastName, email, roleId, employeeTypeId]
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        title: { type: ['string', 'null'] }
+        clientId: { type: ['string', 'null'] }
+        roleId: { type: string }
+        employeeTypeId: { type: string }
+        email: { type: string, format: email }
+        phone: { type: ['string', 'null'] }
+        status: { $ref: '#/components/schemas/EmployeeStatus' }
+        dateHired: { type: ['string', 'null'], format: date }
+    ApproverGroups:
+      type: object
+      description: Approver emails grouped by filing type.
+      required: [timelog, leave, ot]
+      properties:
+        timelog: { type: array, items: { type: string, format: email } }
+        leave:   { type: array, items: { type: string, format: email } }
+        ot:      { type: array, items: { type: string, format: email } }
+
+    # ---- Reference data ----
+    EmployeeType:
+      type: object
+      required: [id, name, isActive, sortOrder]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        isActive: { type: boolean }
+        sortOrder: { type: integer }
+    Client:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    Role:
+      type: object
+      required: [id, name, viewGroup]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        viewGroup: { $ref: '#/components/schemas/ViewGroup' }
+    RolePermission:
+      type: object
+      required: [code, label, allowed]
+      properties:
+        code: { type: string, examples: ['approve'] }
+        label: { type: string, examples: ['Approve / reject filings'] }
+        allowed: { type: boolean }
+
+    # ---- Settings ----
+    Settings:
+      type: object
+      description: System settings (mirrors the settings key/value table).
+      properties:
+        timezone: { type: string, examples: ['GMT+8'] }
+        workWeek: { type: string, examples: ['Mon-Fri'] }
+        standardHoursDay: { type: integer, examples: [8] }
+        emailTimelog: { type: boolean }
+        emailOvertime: { type: boolean }
+        emailLeave: { type: boolean }
+        autoRemind48h: { type: boolean }
+
+    # ---- Accupay ----
+    AccupayStatus:
+      type: object
+      required: [isConnected, realtimeSync]
+      properties:
+        isConnected: { type: boolean }
+        realtimeSync: { type: boolean }
+        lastSyncAt: { type: ['string', 'null'], format: date-time }
+        lastSyncRecordCount: { type: ['integer', 'null'] }
+    AccupaySyncRun:
+      type: object
+      required: [id, status, recordCount, errorCount]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [running, success, partial, failed] }
+        recordCount: { type: integer }
+        errorCount: { type: integer }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: ['string', 'null'], format: date-time }
+        message: { type: ['string', 'null'] }

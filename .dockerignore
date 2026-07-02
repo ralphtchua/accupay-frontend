@@ -1,0 +1,13 @@
+# Keep the build context small and prevent copying the host's
+# node_modules/dist into the image (the container builds its own).
+node_modules
+dist
+.git
+.gitignore
+*.local
+.env
+.DS_Store
+Dockerfile
+Dockerfile.dev
+docker-compose.yml
+README.md

@@ -1,0 +1,73 @@
+/* =====================================================================
+   Design tokens — extracted verbatim from the Rev 3 prototype.
+   Every value here traces to a specific style in Prototype.dc.html so
+   the React build is a pixel-for-pixel match. Change the brand in ONE
+   place by editing these custom properties.
+   ===================================================================== */
+
+:root {
+  /* ---- Brand / primary ---- */
+  --ao-primary: #0e2e7d;        /* sidebar, primary buttons, accents */
+  --ao-primary-hover: #0a2566;  /* button hover */
+  --ao-primary-deep: #0a2566;
+
+  /* ---- Surfaces ---- */
+  --ao-bg: #f1f3f7;             /* app background */
+  --ao-surface: #ffffff;        /* cards, header */
+  --ao-surface-muted: #f7f9fc;  /* inputs */
+  --ao-surface-soft: #f5f7fd;   /* info callouts */
+  --ao-auth-grad-from: #eef1f7; /* auth screen gradient */
+  --ao-auth-grad-to: #dfe6f3;
+
+  /* ---- Text ---- */
+  --ao-text: #16202e;          /* primary text */
+  --ao-text-2: #3b4350;        /* table body */
+  --ao-text-3: #5a6473;        /* labels */
+  --ao-muted: #7b8595;         /* secondary text */
+  --ao-muted-2: #98a2af;       /* tertiary / placeholders */
+
+  /* ---- Sidebar text (on navy) ---- */
+  --ao-nav-idle: #aebbd9;
+  --ao-nav-header: #6d7ba3;
+  --ao-nav-signout: #8a98c4;
+
+  /* ---- Borders ---- */
+  --ao-border: #e4e7ec;
+  --ao-border-strong: #d3d9e0;
+  --ao-border-soft: #eef1f5;
+  --ao-border-info: #d4ddf2;
+
+  /* ---- Status (text, bg) pairs ---- */
+  --ao-success: #1f8a5b;  --ao-success-bg: #e8f5ee;
+  --ao-pending: #c97a16;  --ao-pending-bg: #fdf2e3;
+  --ao-danger:  #c0392b;  --ao-danger-bg:  #fbecea;
+  --ao-info:    #1f5fae;  --ao-info-bg:    #e8eff9;
+  --ao-info-2:  #0e2e7d;  --ao-info-2-bg:  #e8eff9;
+
+  /* ---- Accents for filing kinds (Approvals/History) ---- */
+  --ao-accent-leave: #7c3aed;
+  --ao-accent-ot: #c97a16;
+  --ao-accent-timelog: #0e2e7d;
+
+  /* ---- Radius ---- */
+  --ao-r-sm: 7px;
+  --ao-r-md: 9px;
+  --ao-r-lg: 14px;
+  --ao-r-xl: 16px;
+  --ao-r-2xl: 18px;
+
+  /* ---- Shadows ---- */
+  --ao-shadow-card: 0 1px 2px rgba(14, 30, 60, .04);
+  --ao-shadow-pop: 0 10px 28px rgba(16, 32, 46, .28);
+  --ao-shadow-modal: 0 24px 60px rgba(0, 0, 0, .3);
+  --ao-shadow-auth: 0 24px 60px rgba(14, 30, 60, .14);
+  --ao-shadow-toast: 0 12px 34px rgba(0, 0, 0, .22);
+
+  /* ---- Typography ---- */
+  --ao-font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --ao-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---- Layout ---- */
+  --ao-sidebar-w: 236px;
+  --ao-header-h: 66px;
+}
