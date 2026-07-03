@@ -1,5 +1,6 @@
-import axios from "axios";
 import api from "../config/AxiosConfig";
+import { User } from "@/interfaces/User";
+import { tokenService } from "./TokenService";
 
 const API_BASE = "/api/account";
 
@@ -16,5 +17,9 @@ export async function Auth(email: string, password: string) {
     throw new Error(errorData.message || "Invalid email or password");
   }
   const data = await response.json();
-  localStorage.setItem("auth_token", data.token);
+  tokenService.set(data.token);
+}
+export async function getCurrentEmployee() {
+  const response = await api.get<User>(`${API_BASE}`);
+  return response.data;
 }

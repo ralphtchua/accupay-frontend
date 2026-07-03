@@ -2,6 +2,7 @@ import { tokenService } from "@/services/TokenService";
 import axios from "axios";
 import type { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 const api: AxiosInstance = axios.create({
+  baseURL: "https://localhost:5001",
   headers: {
     "Content-Type": "application/json",
   },
@@ -10,11 +11,9 @@ const api: AxiosInstance = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = tokenService.get();
-
-    if (token && config.headers) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-
     return config;
   },
   (error) => {

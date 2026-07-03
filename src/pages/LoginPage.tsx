@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.png";
 import { Auth } from "@/services/AuthService";
-
 export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -17,9 +16,8 @@ export function LoginPage() {
     try {
       await Auth(email, password);
 
-      // navigate("/dashboard");
+      navigate("/dashboard");
     } catch (error) {
-      console.error("Fetch error:", error);
       alert(error || "Failed to connect to the server.");
     }
   }
