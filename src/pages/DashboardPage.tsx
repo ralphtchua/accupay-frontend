@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DashboardStats, Employee, Filing } from '@/types/domain';
 import { getCurrentEmployee, getDashboardStats, getMyFilings, setCheckedIn } from '@/lib/api';
 import { Chip, StatCard } from '@/components/ui';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { fmtHeaderDate, fmtTableDate, fmtTime12, liveClock } from '@/lib/format';
 
@@ -36,7 +35,6 @@ export function DashboardPage() {
   const [checkedIn, setChecked] = useState(true);
   const checkInTime = '8:02 AM';
   const [now, setNow] = useState(liveClock());
-  const [modalOpen, setModalOpen] = useState(false);
 
   // Load dashboard data once.
   useEffect(() => {
@@ -65,11 +63,10 @@ export function DashboardPage() {
   const today = useMemo(() => fmtHeaderDate(), []);
   const firstName = me?.name.split(' ')[0] ?? '';
 
-  async function confirmCheck() {
+  async function toggleCheck() {
     const next = !checkedIn;
     await setCheckedIn(next);
     setChecked(next);
-    setModalOpen(false);
     notify(next ? 'Checked in — have a great shift!' : 'Checked out — your time has been logged');
   }
 
@@ -102,7 +99,7 @@ export function DashboardPage() {
           </div>
         </div>
         <button
-          onClick={() => setModalOpen(true)}
+          onClick={toggleCheck}
           className="ao-btn"
           style={{
             height: 44, width: 140, color: '#fff',
@@ -149,16 +146,6 @@ export function DashboardPage() {
           </div>
         ))}
       </div>
-
-      <ConfirmModal
-        open={modalOpen}
-        title={checkedIn ? 'Check out now?' : 'Check in now?'}
-        body={checkedIn ? 'This will log your time out and end your shift.' : 'This will start your shift and record your time in.'}
-        confirmLabel={checkedIn ? 'Yes, check out' : 'Yes, check in'}
-        confirmVariant={checkedIn ? 'danger' : 'success'}
-        onConfirm={confirmCheck}
-        onCancel={() => setModalOpen(false)}
-      />
     </div>
   );
 }

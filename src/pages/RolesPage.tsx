@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { Role, RolePermission } from '@/types/domain';
 import { getRolePermissions, getRoles, setRolePermission } from '@/lib/api';
-import { Card } from '@/components/ui';
-import { PageIntro, EmptyState } from '@/components/page';
 import { Toggle } from '@/components/form';
+import { EmptyState } from '@/components/page';
 import { useToast } from '@/components/Toast';
 
 /* =====================================================================
-   Roles & Permissions — role selector on the left, a toggle list of
-   screen permissions on the right. Mirrors the prototype matrix.
+   Roles & Permissions — matches the prototype: a column of white role
+   cards on the left, and a "Screen access — {role}" panel on the right
+   with a toggle per screen. Disabled permissions show greyed labels.
    ===================================================================== */
 
 export function RolesPage() {
@@ -36,46 +36,45 @@ export function RolesPage() {
   }
 
   return (
-    <div style={{ maxWidth: 880 }}>
-      <PageIntro title="Roles & Permissions" subtitle="Control which screens each role can access." />
+    <div style={{ maxWidth: 820, display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+      {/* Role list — white bordered cards */}
+      <div style={{ width: 180, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {roles.map((r) => {
+          const active = activeRole?.id === r.id;
+          return (
+            <div
+              key={r.id}
+              onClick={() => setActiveRole(r)}
+              style={{
+                padding: '11px 13px', borderRadius: 9, cursor: 'pointer',
+                font: '600 13px var(--ao-font)', transition: '.15s',
+                background: active ? 'var(--ao-primary)' : 'var(--ao-surface)',
+                color: active ? '#fff' : 'var(--ao-text-3)',
+                border: active ? '1px solid var(--ao-primary)' : '1px solid var(--ao-border)',
+              }}
+            >
+              {r.name}
+            </div>
+          );
+        })}
+      </div>
 
-      <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
-        <Card style={{ width: 220, flexShrink: 0, padding: 8 }}>
-          {roles.map((r) => {
-            const active = activeRole?.id === r.id;
-            return (
-              <button key={r.id} onClick={() => setActiveRole(r)}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
-                  padding: '11px 13px', borderRadius: 8, marginBottom: 2,
-                  background: active ? 'var(--ao-info-bg)' : 'transparent',
-                  color: active ? 'var(--ao-primary)' : 'var(--ao-text-2)',
-                  font: `${active ? 700 : 500} 13px var(--ao-font)`,
-                }}>
-                {r.name}
-                <span style={{ display: 'block', font: '400 10.5px var(--ao-font)', color: 'var(--ao-muted)', marginTop: 1, textTransform: 'capitalize' }}>
-                  {r.viewGroup} view
-                </span>
-              </button>
-            );
-          })}
-        </Card>
-
-        <Card style={{ flex: 1, padding: '8px 4px' }}>
-          {loading ? (
-            <EmptyState message="Loading permissions…" />
-          ) : (
-            perms.map((p) => (
-              <div key={p.code} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--ao-border-soft)' }}>
-                <div>
-                  <div style={{ font: '600 13.5px var(--ao-font)', color: 'var(--ao-text)' }}>{p.label}</div>
-                  <div style={{ font: '400 11px var(--ao-font-mono)', color: 'var(--ao-muted)' }}>{p.code}</div>
-                </div>
-                <Toggle checked={p.allowed} onChange={(v) => toggle(p.code, v)} />
-              </div>
-            ))
-          )}
-        </Card>
+      {/* Screen access panel */}
+      <div style={{ flex: 1, background: 'var(--ao-surface)', border: '1px solid var(--ao-border)', borderRadius: 14, padding: '22px 24px' }}>
+        <div style={{ font: '700 15px var(--ao-font)' }}>Screen access — {activeRole?.name ?? ''}</div>
+        <div style={{ font: '400 12px var(--ao-font)', color: 'var(--ao-muted-2)', marginBottom: 16 }}>
+          Toggle which screens this role can open.
+        </div>
+        {loading ? (
+          <EmptyState message="Loading permissions…" />
+        ) : (
+          perms.map((p) => (
+            <div key={p.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid var(--ao-border-soft)' }}>
+              <span style={{ font: '500 13px var(--ao-font)', color: p.allowed ? 'var(--ao-text-2)' : 'var(--ao-muted-2)' }}>{p.label}</span>
+              <Toggle checked={p.allowed} onChange={(v) => toggle(p.code, v)} />
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

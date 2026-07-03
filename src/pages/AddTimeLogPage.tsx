@@ -65,7 +65,7 @@ export function AddTimeLogPage() {
       {err && <div style={{ font: '500 12px var(--ao-font)', color: 'var(--ao-danger)', marginBottom: 14 }}>{err}</div>}
 
       <EmailCallout>
-        On submit, this filing is <b>emailed to your approver(s)</b> and stays <b>Pending</b> until approved. Approvers can also approve in-app.
+        On submit, this filing is <b>emailed to your approver(s)</b> and stays <b>Pending</b> until approved.
       </EmailCallout>
 
       <button

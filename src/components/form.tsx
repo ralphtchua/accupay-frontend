@@ -19,11 +19,11 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input className="ao-input" {...props} />;
 }
 
-export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea({ style, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
       className="ao-input"
-      style={{ height: 92, padding: '10px 12px', resize: 'vertical', lineHeight: 1.5 }}
+      style={{ height: 92, padding: '10px 12px', resize: 'vertical', lineHeight: 1.5, ...style }}
       {...props}
     />
   );

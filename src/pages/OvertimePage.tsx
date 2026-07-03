@@ -76,7 +76,7 @@ export function OvertimePage() {
       {err && <div style={{ font: '500 12px var(--ao-font)', color: 'var(--ao-danger)', marginBottom: 14 }}>{err}</div>}
 
       <EmailCallout>
-        This overtime filing is <b>emailed to your approver(s)</b> for one-click approval, or approved in-app.
+        This overtime filing is <b>emailed to your approver(s)</b>.
       </EmailCallout>
 
       <button

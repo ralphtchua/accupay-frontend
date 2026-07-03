@@ -31,6 +31,7 @@ export const API_BASE: string =
 /* ---- Mutable session state (clones so we never mutate the seed) ----- */
 let filings: Filing[] = MOCK_FILINGS.map((f) => ({ ...f }));
 let entries: TimeEntry[] = MOCK_TIME_ENTRIES.map((e) => ({ ...e }));
+let employees: Employee[] = MOCK_EMPLOYEES.map((e) => ({ ...e, approvers: { ...e.approvers } }));
 let settings: Settings = { ...MOCK_SETTINGS };
 const rolePerms: Record<string, string[]> = JSON.parse(JSON.stringify(MOCK_ROLE_PERMS));
 let nextId = 1000;
@@ -68,8 +69,22 @@ export function getTimeEntries(employeeId: string, from?: string, to?: string): 
 export function getLeaveBalances(_employeeId: string): Promise<LeaveBalance[]> {
   return delay(MOCK_LEAVE_BALANCES);
 }
+/** Leave filings for the current user — backs the Leave requests log. */
+export function getMyLeaveFilings(employeeId: string): Promise<Filing[]> {
+  const rows = filings
+    .filter((f) => f.employeeId === employeeId && f.kind === 'Leave')
+    .sort((a, b) => +new Date(b.filingDate) - +new Date(a.filingDate));
+  return delay(rows);
+}
 export function getLeaveTypes(): Promise<LeaveType[]> {
   return delay(MOCK_LEAVE_TYPES.filter((t) => t.isActive));
+}
+/** The user's leave filings, for the Leave Balances log table. */
+export function getMyLeaves(employeeId: string): Promise<Filing[]> {
+  const mine = filings
+    .filter((f) => f.employeeId === employeeId && f.kind === 'Leave')
+    .sort((a, b) => +new Date(b.filingDate) - +new Date(a.filingDate));
+  return delay(mine);
 }
 
 /* ---- Check in / out ------------------------------------------------- */
@@ -133,13 +148,39 @@ export function decideFiling(id: string, decision: 'Approved' | 'Declined'): Pro
 /* ---- Employees ------------------------------------------------------ */
 export function getEmployees(q?: string): Promise<Employee[]> {
   const needle = (q ?? '').toLowerCase();
-  const rows = MOCK_EMPLOYEES.filter(
+  const rows = employees.filter(
     (e) => !needle || e.name.toLowerCase().includes(needle) || e.email.toLowerCase().includes(needle),
   );
   return delay(rows);
 }
 export function getEmployee(id: string): Promise<Employee | undefined> {
-  return delay(MOCK_EMPLOYEES.find((e) => e.id === id));
+  return delay(employees.find((e) => e.id === id));
+}
+export function changeEmployeeRole(id: string, roleName: string): Promise<Employee> {
+  employees = employees.map((e) => (e.id === id ? { ...e, roleName } : e));
+  return delay(employees.find((e) => e.id === id)!);
+}
+export function addApprover(id: string, cat: 'timelog' | 'leave' | 'ot', email: string): Promise<Employee> {
+  employees = employees.map((e) =>
+    e.id === id ? { ...e, approvers: { ...e.approvers, [cat]: [...e.approvers[cat], email] } } : e,
+  );
+  return delay(employees.find((e) => e.id === id)!);
+}
+export function removeApprover(id: string, cat: 'timelog' | 'leave' | 'ot', idx: number): Promise<Employee> {
+  employees = employees.map((e) =>
+    e.id === id ? { ...e, approvers: { ...e.approvers, [cat]: e.approvers[cat].filter((_, i) => i !== idx) } } : e,
+  );
+  return delay(employees.find((e) => e.id === id)!);
+}
+/** Generate a strong random password (matches the prototype generator). */
+export function generatePassword(): string {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  let p = '';
+  for (let i = 0; i < 14; i++) p += c[Math.floor(Math.random() * c.length)];
+  return p;
+}
+export function resetEmployeePassword(_id: string, _newPassword: string): Promise<void> {
+  return delay(undefined);
 }
 
 /* ---- Reference data ------------------------------------------------- */
@@ -163,6 +204,22 @@ export function getSettings(): Promise<Settings> { return delay({ ...settings })
 export function saveSettings(next: Settings): Promise<Settings> {
   settings = { ...next };
   return delay({ ...settings });
+}
+
+/* ---- Email templates ------------------------------------------------ */
+export interface EmailTemplate { key: string; label: string; subject: string; body: string; }
+let emailTemplates: EmailTemplate[] = [
+  { key: 'timelog', label: 'Time log approval', subject: 'Time log filing awaiting your approval',
+    body: 'Hi {approver},\n\n{employee} filed a time log correction for {date} ({detail}).\nReason: {reason}\n\nReview it here: {link}' },
+  { key: 'overtime', label: 'Overtime approval', subject: 'Overtime filing awaiting your approval',
+    body: 'Hi {approver},\n\n{employee} filed {hours} h of overtime on {date}.\nReason: {reason}\n\nReview it here: {link}' },
+  { key: 'leave', label: 'Leave approval', subject: 'Leave request awaiting your approval',
+    body: 'Hi {approver},\n\n{employee} requested {leaveType} leave ({detail}).\nReason: {reason}\n\nReview it here: {link}' },
+];
+export function getEmailTemplates(): Promise<EmailTemplate[]> { return delay(emailTemplates.map((t) => ({ ...t }))); }
+export function saveEmailTemplate(key: string, subject: string, body: string): Promise<EmailTemplate> {
+  emailTemplates = emailTemplates.map((t) => (t.key === key ? { ...t, subject, body } : t));
+  return delay(emailTemplates.find((t) => t.key === key)!);
 }
 export function runAccupaySync(): Promise<{ recordCount: number; syncedAt: string }> {
   const syncedAt = new Date().toISOString();
