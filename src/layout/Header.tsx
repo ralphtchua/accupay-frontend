@@ -3,17 +3,12 @@ import type { ViewGroup } from '@/types/domain';
 import { Avatar } from '@/components/ui';
 import { PAGE_TITLES, VIEW_DEFAULT_ROUTE } from './nav';
 import { useView } from './ViewContext';
+import { useCurrentUser } from '@/context/CurrentUserContext';
 
 /* =====================================================================
    Header — 66px white bar: page title (left), "View as" segmented
-   control + user identity (right). Matches the prototype header.
+   control + the real signed-in user's identity (right).
    ===================================================================== */
-
-const VIEW_USERS: Record<ViewGroup, { name: string; sub: string }> = {
-  employee: { name: 'Maria Santos', sub: 'Data Analyst · Acme Corp' },
-  approver: { name: 'Acme Corp', sub: 'Approver' },
-  admin: { name: 'Ana Reyes', sub: 'HR Administrator' },
-};
 
 const ROLES: { key: ViewGroup; label: string }[] = [
   { key: 'employee', label: 'Employee' },
@@ -23,10 +18,21 @@ const ROLES: { key: ViewGroup; label: string }[] = [
 
 export function Header() {
   const { view, setView } = useView();
+  const { user, organization, role, loading } = useCurrentUser();
   const location = useLocation();
   const navigate = useNavigate();
-  const user = VIEW_USERS[view];
   const title = PAGE_TITLES[location.pathname] ?? '';
+
+  // Real identity from the API (degrades gracefully while it loads).
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
+    user?.email ||
+    (loading ? 'Loading…' : 'Unknown user');
+  const roleLabel =
+    role?.name ?? (user?.type === 'Admin' ? 'Administrator' : 'Employee');
+  const identitySub = organization?.name
+    ? `${roleLabel} · ${organization.name}`
+    : roleLabel;
 
   const switchView = (v: ViewGroup) => {
     setView(v);
@@ -81,10 +87,10 @@ export function Header() {
           }}
         >
           <div style={{ textAlign: 'right' }}>
-            <div style={{ font: '600 13px var(--ao-font)' }}>{user.name}</div>
-            <div style={{ font: '400 11px var(--ao-font)', color: 'var(--ao-muted)' }}>{user.sub}</div>
+            <div style={{ font: '600 13px var(--ao-font)' }}>{displayName}</div>
+            <div style={{ font: '400 11px var(--ao-font)', color: 'var(--ao-muted)' }}>{identitySub}</div>
           </div>
-          <Avatar name={user.name} size={38} />
+          <Avatar name={displayName} size={38} />
         </div>
       </div>
     </header>

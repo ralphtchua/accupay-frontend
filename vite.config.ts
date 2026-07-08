@@ -16,7 +16,24 @@ export default defineConfig({
     watch: {
       usePolling: true, // reliable file-change detection across Docker bind mounts (WSL/macOS)
     },
-    // When the C# API is exposed via ngrok, point VITE_API_URL at the tunnel
-    // (see src/lib/api.ts). Until then the app runs against the mock layer.
+    proxy: {
+      // Forward all /api calls to the C# API so the browser only ever talks to
+      // the same origin (avoids CORS + the self-signed dev-cert). secure:false
+      // lets Vite accept the localhost https dev certificate.
+      //
+      // NOTE: this Vite server runs inside a Docker container, so "localhost"
+      // here means the container itself. The C# API runs on the Windows HOST,
+      // reachable from the container as host.docker.internal (Docker Desktop).
+      // Override with VITE_API_PROXY_TARGET if the API lives elsewhere.
+      "/api": {
+        // Default assumes the API runs on this same machine (running Vite
+        // locally with `npm run dev`). When running inside Docker, compose sets
+        // VITE_API_PROXY_TARGET=https://host.docker.internal:5001 to reach the
+        // API on the Windows host instead.
+        target: process.env.VITE_API_PROXY_TARGET ?? "https://localhost:5001",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });

@@ -19,5 +19,9 @@ services:
       # Vite needs polling to detect file changes on some Docker setups
       # (notably Windows/WSL and macOS bind mounts).
       - CHOKIDAR_USEPOLLING=true
+      # Inside the container, "localhost" is the container itself. Reach the C#
+      # API running on the Windows host via host.docker.internal (Docker
+      # Desktop). Remove/override this if you run the API elsewhere.
+      - VITE_API_PROXY_TARGET=https://host.docker.internal:5001
       # Point this at your C# API's ngrok tunnel when the backend is ready.
       # - VITE_API_URL=https://your-subdomain.ngrok-free.app

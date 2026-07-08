@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DashboardStats, Employee, Filing } from "@/types/domain";
-import { getDashboardStats, getMyFilings, setCheckedIn } from "@/lib/api";
+import { getDashboardStats, setCheckedIn } from "@/lib/api";
+import { getMyFilings } from "@/services/FilingsService";
 import { Chip, StatCard } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import {
+  fmtClockTime,
   fmtHeaderDate,
   fmtTableDate,
   fmtTime12,
@@ -42,8 +44,10 @@ export function DashboardPage() {
   const [filings, setFilings] = useState<Filing[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [checkedIn, setChecked] = useState(true);
-  const checkInTime = "8:02 AM";
+  // No backend check-in endpoint yet, so this is session-local: we stamp the
+  // real time the moment the user checks in, rather than a hardcoded value.
+  const [checkedIn, setChecked] = useState(false);
+  const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [now, setNow] = useState(liveClock());
   const { isAuth, removeToken } = useAuth();
 
@@ -55,10 +59,10 @@ export function DashboardPage() {
     }
     let alive = true;
     (async () => {
-      const employee = await getCurrentEmployee().then(setMe);
+      await getCurrentEmployee().then(setMe);
       const [s, f] = await Promise.all([
         getDashboardStats("1"),
-        getMyFilings("1"),
+        getMyFilings().catch(() => [] as Filing[]),
       ]);
       if (!alive) return;
       setStats(s);
@@ -78,11 +82,14 @@ export function DashboardPage() {
 
   const today = useMemo(() => fmtHeaderDate(), []);
   const firstName = me?.firstName;
+  // Pending card is derived from the real filings; hour cards stay on mock.
+  const pendingCount = filings.filter((f) => f.status === "Pending").length;
 
   async function toggleCheck() {
     const next = !checkedIn;
     await setCheckedIn(next);
     setChecked(next);
+    setCheckInTime(next ? fmtClockTime() : null);
     notify(
       next
         ? "Checked in — have a great shift!"
@@ -184,7 +191,7 @@ export function DashboardPage() {
         />
         <StatCard
           label="Pending approval"
-          value={String(stats.pendingCount)}
+          value={String(pendingCount)}
           valueColor="var(--ao-pending)"
           tooltip="Number of your filings (time log, overtime & leave) still waiting on an approver's decision."
         />

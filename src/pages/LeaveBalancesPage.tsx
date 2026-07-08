@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Filing, LeaveBalance } from '@/types/domain';
-import { getCurrentEmployee, getLeaveBalances, getMyLeaveFilings } from '@/lib/api';
+import type { Filing } from '@/types/domain';
+import { getMyLeaves, getMyLeaveBalances, type LeaveBalance } from '@/services/FilingsService';
 import { Card, Chip } from '@/components/ui';
 import { Table, Td, EmptyState } from '@/components/page';
 import { fmtTableDate, fmtTime12 } from '@/lib/format';
@@ -15,10 +15,8 @@ function BalanceCard({ b }: { b: LeaveBalance }) {
   return (
     <div style={{ flex: 1, background: 'var(--ao-surface)', border: '1px solid var(--ao-border)', borderRadius: 'var(--ao-r-lg)', padding: '16px 18px' }}>
       <div style={{ font: '500 12px var(--ao-font)', color: 'var(--ao-muted)' }}>{b.leaveType}</div>
-      <div style={{ font: '700 22px var(--ao-font)', color: 'var(--ao-text)' }}>{b.usedDays.toFixed(1)}</div>
-      <div style={{ font: '400 11px var(--ao-font)', color: 'var(--ao-muted-2)' }}>
-        of {b.entitledDays} days · {b.hoursLeft.toFixed(1)} h left
-      </div>
+      <div style={{ font: '700 22px var(--ao-font)', color: 'var(--ao-text)' }}>{b.balance.toFixed(1)}</div>
+      <div style={{ font: '400 11px var(--ao-font)', color: 'var(--ao-muted-2)' }}>days remaining</div>
     </div>
   );
 }
@@ -38,8 +36,11 @@ export function LeaveBalancesPage() {
 
   useEffect(() => {
     (async () => {
-      const me = await getCurrentEmployee();
-      const [b, l] = await Promise.all([getLeaveBalances(me.id), getMyLeaveFilings(me.id)]);
+      const [b, l] = await Promise.all([
+        // Balances need the Leave:read permission; fall back to empty on 403.
+        getMyLeaveBalances().catch(() => [] as LeaveBalance[]),
+        getMyLeaves().catch(() => [] as Filing[]),
+      ]);
       setBalances(b);
       setLeaves(l);
       setLoading(false);
@@ -48,9 +49,17 @@ export function LeaveBalancesPage() {
 
   return (
     <div style={{ maxWidth: 880 }}>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
-        {balances.map((b) => <BalanceCard key={b.leaveType} b={b} />)}
-      </div>
+      {balances.length > 0 ? (
+        <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
+          {balances.map((b) => <BalanceCard key={b.leaveType} b={b} />)}
+        </div>
+      ) : (
+        !loading && (
+          <div style={{ font: '400 12px var(--ao-font)', color: 'var(--ao-muted)', marginBottom: 18 }}>
+            No leave balances to show — this needs the Leave:read permission and seeded leave credits.
+          </div>
+        )
+      )}
 
       <Card style={{ padding: '20px 22px' }}>
         <div style={{ font: '700 15px var(--ao-font)', marginBottom: 12 }}>Leave requests</div>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createOvertimeFiling } from '@/lib/api';
+import { createOvertime } from '@/services/FilingsService';
 import { Card } from '@/components/ui';
 import { Field, TextInput, TextArea, EmailCallout } from '@/components/form';
 import { useToast } from '@/components/Toast';
@@ -36,10 +36,14 @@ export function OvertimePage() {
     if (!(date && hours > 0 && reason.trim())) { setErr('Please complete all fields.'); return; }
     setErr('');
     setBusy(true);
-    await createOvertimeFiling({ date, from, to, hours, reason: reason.trim() });
-    setBusy(false);
-    notify('Overtime filed — routed to your approver');
-    navigate('/myrequests');
+    try {
+      await createOvertime({ date, from, to, reason: reason.trim() });
+      notify('Overtime filed — routed to your approver');
+      navigate('/myrequests');
+    } catch (e) {
+      setErr((e as Error).message || 'Could not submit overtime. Please try again.');
+      setBusy(false);
+    }
   }
 
   return (

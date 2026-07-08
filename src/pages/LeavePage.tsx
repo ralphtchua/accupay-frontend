@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { LeaveType } from '@/types/domain';
-import { createLeaveFiling, getLeaveTypes } from '@/lib/api';
+import { createLeave, getLeaveTypes } from '@/services/FilingsService';
 import { Card } from '@/components/ui';
 import { Field, Select, TextInput, TextArea } from '@/components/form';
 import { useToast } from '@/components/Toast';
@@ -35,7 +34,7 @@ const SUMMARY_BAR: React.CSSProperties = {
 export function LeavePage() {
   const { notify } = useToast();
   const navigate = useNavigate();
-  const [types, setTypes] = useState<LeaveType[]>([]);
+  const [types, setTypes] = useState<string[]>([]);
   const [leaveType, setLeaveType] = useState('');
   const [timing, setTiming] = useState<'Day' | 'Hour'>('Day');
   const [from, setFrom] = useState('');
@@ -48,7 +47,9 @@ export function LeavePage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    getLeaveTypes().then((t) => { setTypes(t); if (t[0]) setLeaveType(`${t[0].name} leave`); });
+    getLeaveTypes()
+      .then((t) => { setTypes(t); if (t[0]) setLeaveType(t[0]); })
+      .catch(() => setTypes([]));
   }, []);
 
   // Days and hours are auto-derived (read-only) from the inputs.
@@ -61,14 +62,18 @@ export function LeavePage() {
     if (!valid) { setErr('Please complete all required fields.'); return; }
     setErr('');
     setBusy(true);
-    await createLeaveFiling(
-      timing === 'Day'
-        ? { leaveType, timing, from, to, days, reason: reason.trim() }
-        : { leaveType, timing, date, start, end, hours, reason: reason.trim() },
-    );
-    setBusy(false);
-    notify('Leave filed — routed to your approver');
-    navigate('/myrequests');
+    try {
+      await createLeave(
+        timing === 'Day'
+          ? { leaveType, timing, from, to, reason: reason.trim() }
+          : { leaveType, timing, date, start, end, reason: reason.trim() },
+      );
+      notify('Leave filed — routed to your approver');
+      navigate('/myrequests');
+    } catch (e) {
+      setErr((e as Error).message || 'Could not submit leave. Please try again.');
+      setBusy(false);
+    }
   }
 
   return (
@@ -82,7 +87,7 @@ export function LeavePage() {
         <div style={{ flex: 1 }}>
           <Field label="Leave type">
             <Select value={leaveType} onChange={setLeaveType}
-              options={types.map((t) => ({ value: `${t.name} leave`, label: `${t.name} leave` }))} />
+              options={types.map((t) => ({ value: t, label: t }))} />
           </Field>
         </div>
         <div style={{ flex: 1 }}>

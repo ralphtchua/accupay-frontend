@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Filing } from '@/types/domain';
-import { getApprovalHistory } from '@/lib/api';
+import { getApprovalHistory } from '@/services/FilingsService';
 import { Card, Chip } from '@/components/ui';
 import { PageIntro, Table, Td, EmptyState } from '@/components/page';
 import { fmtTableDate, fmtTime12 } from '@/lib/format';
@@ -20,7 +20,12 @@ export function HistoryPage() {
   const [rows, setRows] = useState<Filing[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { getApprovalHistory().then((r) => { setRows(r); setLoading(false); }); }, []);
+  useEffect(() => {
+    getApprovalHistory()
+      .then((r) => setRows(r))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div style={{ maxWidth: 940 }}>

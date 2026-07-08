@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Filing, FilingStatus } from '@/types/domain';
-import { getCurrentEmployee, getMyFilings } from '@/lib/api';
+import { getMyFilings } from '@/services/FilingsService';
 import { Card, Chip } from '@/components/ui';
 import { PageIntro, Table, Td, EmptyState } from '@/components/page';
 import { Segmented } from '@/components/form';
@@ -28,9 +28,13 @@ export function MyRequestsPage() {
 
   useEffect(() => {
     (async () => {
-      const me = await getCurrentEmployee();
-      setAll(await getMyFilings(me.id));
-      setLoading(false);
+      try {
+        setAll(await getMyFilings());
+      } catch {
+        setAll([]); // surfaces as the empty state rather than a crash
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 

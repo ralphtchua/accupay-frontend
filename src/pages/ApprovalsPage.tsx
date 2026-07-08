@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Filing } from '@/types/domain';
-import { decideFiling, getPendingApprovals } from '@/lib/api';
+import { decideFiling, getPendingApprovals } from '@/services/FilingsService';
 import { Avatar, Card } from '@/components/ui';
 import { PageIntro, EmptyState } from '@/components/page';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -32,8 +32,13 @@ export function ApprovalsPage() {
 
   async function load() {
     setLoading(true);
-    setRows(await getPendingApprovals());
-    setLoading(false);
+    try {
+      setRows(await getPendingApprovals());
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -59,10 +64,15 @@ export function ApprovalsPage() {
 
   async function confirm() {
     if (!decision) return;
-    await decideFiling(decision.f.id, decision.type);
-    notify(decision.type === 'Approved' ? 'Filing approved' : 'Filing declined');
-    setDecision(null);
-    load();
+    try {
+      await decideFiling(decision.f, decision.type);
+      notify(decision.type === 'Approved' ? 'Filing approved' : 'Filing declined');
+      setDecision(null);
+      load();
+    } catch (e) {
+      notify((e as Error).message || 'Could not update filing.');
+      setDecision(null);
+    }
   }
 
   const arrow = (key: 'date' | 'name') => (sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');

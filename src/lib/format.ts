@@ -45,6 +45,15 @@ export function liveClock(d = new Date()): string {
   return `${String(h).padStart(2, '0')}:${m}:${s} ${ap}`;
 }
 
+/** '8:02 AM' — short 12-hour clock time (no seconds), for check-in stamps. */
+export function fmtClockTime(d = new Date()): string {
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ap}`;
+}
+
 /** Long date for the dashboard header, e.g. 'Tuesday, June 24, 2026'. */
 export function fmtHeaderDate(d = new Date()): string {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

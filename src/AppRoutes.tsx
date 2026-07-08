@@ -1,5 +1,6 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/layout/AppLayout';
+import { RoleLanding } from '@/layout/RoleLanding';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { TimeLogsPage } from '@/pages/TimeLogsPage';
@@ -16,8 +17,9 @@ import { RolesPage } from '@/pages/RolesPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 
 /* =====================================================================
-   Routes. All screens are built against the mock api layer; the shell
-   wraps every app route. Auth lands on the dashboard.
+   Routes. AppLayout guards the authenticated shell; "/" and unknown
+   paths resolve via RoleLanding, which sends each user to their role's
+   default route (employees → dashboard, admins/approvers → approvals).
    ===================================================================== */
 
 export function AppRoutes() {
@@ -26,6 +28,7 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<AppLayout />}>
+        <Route index element={<RoleLanding />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/timelogs" element={<TimeLogsPage />} />
         <Route path="/myrequests" element={<MyRequestsPage />} />
@@ -39,10 +42,8 @@ export function AppRoutes() {
         <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/roles" element={<RolesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<RoleLanding />} />
       </Route>
-
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

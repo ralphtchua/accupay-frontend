@@ -1,16 +1,15 @@
-import { useEffect, useState } from 'react';
-import type { Employee } from '@/types/domain';
-import { getCurrentEmployee } from '@/lib/api';
-import { Avatar, Card, Chip } from '@/components/ui';
+import { useState } from 'react';
+import { Avatar, Card } from '@/components/ui';
 import { PageIntro, EmptyState } from '@/components/page';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Field, TextInput } from '@/components/form';
 import { useToast } from '@/components/Toast';
-import { fmtLong } from '@/lib/format';
+import { useCurrentUser } from '@/context/CurrentUserContext';
 
 /* =====================================================================
-   My Profile — read-only identity details + a change-password action.
-   Mirrors the prototype My Profile screen.
+   My Profile — real account identity from GET /api/account (+ org/role).
+   Employment details (phone, employee ID, hire date) and password change
+   have no self-service endpoint yet, so they're intentionally omitted.
    ===================================================================== */
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -24,15 +23,19 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function ProfilePage() {
   const { notify } = useToast();
-  const [me, setMe] = useState<Employee | null>(null);
+  const { user, organization, role, loading } = useCurrentUser();
   const [pwOpen, setPwOpen] = useState(false);
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
 
-  useEffect(() => { getCurrentEmployee().then(setMe); }, []);
+  if (loading && !user) return <EmptyState message="Loading profile…" />;
 
-  if (!me) return <EmptyState message="Loading profile…" />;
+  const name =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
+    user?.email ||
+    '—';
+  const roleName = role?.name ?? user?.type ?? '—';
 
   const tooShort = next.length > 0 && next.length < 8;
   const mismatch = confirm.length > 0 && next !== confirm;
@@ -47,24 +50,23 @@ export function ProfilePage() {
 
   return (
     <div style={{ maxWidth: 620 }}>
-      <PageIntro title="My Profile" subtitle="Your account and employment details." />
+      <PageIntro title="My Profile" subtitle="Your account details." />
 
       <Card style={{ padding: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
-          <Avatar name={me.name} size={62} />
+          <Avatar name={name} size={62} />
           <div>
-            <div style={{ font: '700 19px var(--ao-font)' }}>{me.name}</div>
-            <div style={{ font: '400 13px var(--ao-font)', color: 'var(--ao-muted)' }}>{me.title} · {me.clientName ?? 'Internal'}</div>
-            <div style={{ marginTop: 6 }}><Chip status={me.status} /></div>
+            <div style={{ font: '700 19px var(--ao-font)' }}>{name}</div>
+            <div style={{ font: '400 13px var(--ao-font)', color: 'var(--ao-muted)' }}>
+              {roleName}{organization?.name ? ` · ${organization.name}` : ''}
+            </div>
           </div>
         </div>
 
-        <Row label="Employee ID" value={me.empCode} />
-        <Row label="Email" value={me.email} />
-        <Row label="Phone" value={me.phone ?? '—'} />
-        <Row label="Role" value={me.roleName} />
-        <Row label="Employee type" value={me.employeeType} />
-        <Row label="Date hired" value={fmtLong(me.dateHired)} />
+        <Row label="Email" value={user?.email ?? '—'} />
+        <Row label="Role" value={roleName} />
+        <Row label="Account type" value={user?.type ?? '—'} />
+        <Row label="Organization" value={organization?.name ?? '—'} />
 
         <button className="ao-btn ao-btn--ghost" style={{ height: 42, padding: '0 18px', marginTop: 18 }} onClick={() => setPwOpen(true)}>
           Change password

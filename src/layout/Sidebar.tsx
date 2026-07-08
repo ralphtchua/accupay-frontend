@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import logo from '@/assets/logo.png';
 import { NAV } from './nav';
 import { useView } from './ViewContext';
+import { tokenService } from '@/services/TokenService';
 
 /* =====================================================================
    Sidebar — 236px navy rail with logo, sectioned nav, and sign out.
@@ -54,7 +55,10 @@ export function Sidebar() {
       </nav>
 
       <button
-        onClick={() => navigate('/login')}
+        onClick={() => {
+          tokenService.remove(); // actually clear the JWT on sign out
+          navigate('/login');
+        }}
         className="ao-signout"
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%',

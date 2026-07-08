@@ -16,7 +16,9 @@ export function LoginPage() {
     try {
       await Auth(email, password);
 
-      navigate("/dashboard");
+      // Land on "/" and let RoleLanding route by the real role
+      // (employees → dashboard, admins/approvers → approvals).
+      navigate("/");
     } catch (error) {
       alert(error || "Failed to connect to the server.");
     }
