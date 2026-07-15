@@ -11,8 +11,9 @@ export type EmployeeStatus = 'Pending' | 'Active' | 'Suspended' | 'Archived';
 export type TimeEntryKind = 'standard' | 'added' | 'overtime';
 export type TimeEntryStatus = 'Logged' | 'Pending' | 'Approved' | 'Declined';
 
-/** The three top-level shells from the prototype's "View as" switch. */
-export type ViewGroup = 'employee' | 'approver' | 'admin';
+/** The top-level app shells. Approvers no longer log in — admins handle
+    approvals — so only these two remain. */
+export type ViewGroup = 'employee' | 'admin';
 
 export interface Client {
   id: string;

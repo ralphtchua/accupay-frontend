@@ -1,36 +1,57 @@
 import { useEffect, useState } from 'react';
-import type { TimeEntry } from '@/types/domain';
-import { getCurrentEmployee, getTimeEntries } from '@/lib/api';
-import { Card, Chip } from '@/components/ui';
+import { getMyTimeLogs, type TimeLogEntry } from '@/services/TimeLogsService';
+import { Card } from '@/components/ui';
 import { PageIntro, Table, Td, EmptyState } from '@/components/page';
 import { useToast } from '@/components/Toast';
 import { fmtTableDate, fmtTime12 } from '@/lib/format';
 
 /* =====================================================================
-   Time Logs — date-range filterable table of the user's time entries,
-   with a CSV export. Mirrors the prototype Time Logs screen.
+   Time Logs — the employee's own check-ins/outs, filterable by date range,
+   with CSV export. Data from GET /api/self-service/timelogs/employee.
    ===================================================================== */
+
+const datePart = (iso: string) => iso.split('T')[0];
+
+function timeOf(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return fmtTime12(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+}
+function hoursOf(a?: string | null, b?: string | null): number | null {
+  if (!a || !b) return null;
+  const h = (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000;
+  return h > 0 ? h : null;
+}
 
 export function TimeLogsPage() {
   const { notify } = useToast();
-  const [rows, setRows] = useState<TimeEntry[]>([]);
+  const [rows, setRows] = useState<TimeLogEntry[]>([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [loading, setLoading] = useState(true);
 
   async function load(f?: string, t?: string) {
     setLoading(true);
-    const me = await getCurrentEmployee();
-    setRows(await getTimeEntries(me.id, f || undefined, t || undefined));
-    setLoading(false);
+    try {
+      const logs = await getMyTimeLogs(f || undefined, t || undefined);
+      logs.sort((a, b) => ((a.startTime ?? a.date) < (b.startTime ?? b.date) ? 1 : -1)); // newest first
+      setRows(logs);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, []);
 
   function exportCsv() {
-    const header = 'Date,Time In,Time Out,Hours,Type,Status\n';
+    const header = 'Date,Time In,Time Out,Hours\n';
     const body = rows
-      .map((r) => [fmtTableDate(r.workDate), r.timeIn ?? '', r.timeOut ?? '', r.hours ?? '', r.kind, r.status].join(','))
+      .map((r) => {
+        const h = hoursOf(r.startTime, r.endTime);
+        return [fmtTableDate(datePart(r.date)), timeOf(r.startTime), timeOf(r.endTime), h != null ? h.toFixed(2) : ''].join(',');
+      })
       .join('\n');
     const blob = new Blob([header + body], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -42,7 +63,7 @@ export function TimeLogsPage() {
 
   return (
     <div style={{ maxWidth: 940 }}>
-      <PageIntro title="My Time Logs" subtitle="Your recorded attendance, filterable by date range." />
+      <PageIntro title="My Time Logs" subtitle="Your recorded check-ins and check-outs, filterable by date range." />
 
       <Card style={{ padding: '16px 18px', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
@@ -75,17 +96,18 @@ export function TimeLogsPage() {
         ) : rows.length === 0 ? (
           <EmptyState message="No time logs in this range." />
         ) : (
-          <Table head={['Date', 'Time In', 'Time Out', 'Hours', 'Type', 'Status']}>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <Td style={{ fontWeight: 600, color: 'var(--ao-text)' }}>{fmtTableDate(r.workDate)}</Td>
-                <Td>{fmtTime12(r.timeIn) || '—'}</Td>
-                <Td>{fmtTime12(r.timeOut) || '—'}</Td>
-                <Td>{r.hours != null ? `${r.hours.toFixed(1)} h` : '—'}</Td>
-                <Td style={{ textTransform: 'capitalize' }}>{r.kind}</Td>
-                <Td><Chip status={r.status} /></Td>
-              </tr>
-            ))}
+          <Table head={['Date', 'Time In', 'Time Out', 'Hours']}>
+            {rows.map((r) => {
+              const h = hoursOf(r.startTime, r.endTime);
+              return (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600, color: 'var(--ao-text)' }}>{fmtTableDate(datePart(r.date))}</Td>
+                  <Td>{timeOf(r.startTime)}</Td>
+                  <Td>{timeOf(r.endTime)}</Td>
+                  <Td>{h != null ? `${h.toFixed(2)} h` : '—'}</Td>
+                </tr>
+              );
+            })}
           </Table>
         )}
       </Card>

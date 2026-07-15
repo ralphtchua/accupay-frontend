@@ -37,8 +37,11 @@ const CurrentUserContext = createContext<CurrentUserValue | null>(null);
 
 /** Map the signed-in user's real role/type onto one of the app's view groups. */
 function toViewGroup(user: User | null, role: CurrentRole | null): ViewGroup {
-  if (role?.isAdmin || user?.type === "Admin") return "admin";
-  return "employee";
+  // A real role is authoritative. The account "type" is only a fallback — the
+  // API labels any account with no linked employee as "Admin" — so we trust the
+  // role whenever one is assigned. Only admin and employee remain.
+  if (role) return role.isAdmin ? "admin" : "employee";
+  return user?.type === "Admin" ? "admin" : "employee";
 }
 
 export function CurrentUserProvider({ children }: { children: ReactNode }) {

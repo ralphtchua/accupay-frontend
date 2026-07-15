@@ -5,6 +5,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { Field, TextInput } from '@/components/form';
 import { useToast } from '@/components/Toast';
 import { useCurrentUser } from '@/context/CurrentUserContext';
+import { changePassword } from '@/services/AuthService';
 
 /* =====================================================================
    My Profile — real account identity from GET /api/account (+ org/role).
@@ -42,10 +43,15 @@ export function ProfilePage() {
   const canSubmit = cur && next.length >= 8 && next === confirm;
 
   function resetPw() { setPwOpen(false); setCur(''); setNext(''); setConfirm(''); }
-  function submitPw() {
+  async function submitPw() {
     if (!canSubmit) return;
-    resetPw();
-    notify('Password updated');
+    try {
+      await changePassword(cur, next);
+      resetPw();
+      notify('Password updated');
+    } catch (e) {
+      notify((e as Error).message || 'Could not change password.');
+    }
   }
 
   return (

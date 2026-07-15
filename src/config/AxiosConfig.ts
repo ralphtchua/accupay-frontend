@@ -28,7 +28,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // Only a 401 (unauthenticated) means the token is bad/expired. A 403
+    // (forbidden) is a valid session hitting an endpoint it isn't permitted to
+    // use — e.g. an employee touching an admin-only API like /api/leaves/ledger
+    // — and must NOT clear the token, or the whole session breaks.
+    if (error.response?.status === 401) {
       tokenService.remove();
     }
 

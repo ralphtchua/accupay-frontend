@@ -35,6 +35,9 @@ export interface ApiUser {
   firstName?: string;
   lastName?: string;
   email?: string;
+  /** The employee RowID this account is linked to (AspNetUser.EmployeeId,
+      returned on /api/users) — used to link an employee to their account. */
+  employeeId?: number | null;
 }
 
 export interface ApiUserRole {
@@ -97,6 +100,15 @@ export async function createRole(name: string): Promise<ApiRole> {
       rolePermissions: [],
     });
     return data;
+  } catch (err) {
+    throw new Error(apiError(err));
+  }
+}
+
+/** Delete a role. DELETE /api/roles/{id} (RoleDelete-gated; admin bypasses). */
+export async function deleteRole(id: number): Promise<void> {
+  try {
+    await api.delete(`/api/roles/${id}`);
   } catch (err) {
     throw new Error(apiError(err));
   }

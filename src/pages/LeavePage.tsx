@@ -31,11 +31,15 @@ const SUMMARY_BAR: React.CSSProperties = {
   font: '500 13px var(--ao-font)', color: 'var(--ao-text-3)',
 };
 
+/** Standard leave types used until the org's configured types load (the
+    backend create accepts the type as a plain string). */
+const FALLBACK_LEAVE_TYPES = ['Vacation Leave', 'Sick Leave'];
+
 export function LeavePage() {
   const { notify } = useToast();
   const navigate = useNavigate();
-  const [types, setTypes] = useState<string[]>([]);
-  const [leaveType, setLeaveType] = useState('');
+  const [types, setTypes] = useState<string[]>(FALLBACK_LEAVE_TYPES);
+  const [leaveType, setLeaveType] = useState(FALLBACK_LEAVE_TYPES[0]);
   const [timing, setTiming] = useState<'Day' | 'Hour'>('Day');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -47,9 +51,19 @@ export function LeavePage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // The field starts on the fallback types (so it's usable immediately and
+    // never flashes an empty/warning state); swap in the org's configured
+    // types if the API returns any. On failure we simply keep the fallback.
     getLeaveTypes()
-      .then((t) => { setTypes(t); if (t[0]) setLeaveType(t[0]); })
-      .catch(() => setTypes([]));
+      .then((t) => {
+        if (t.length) {
+          setTypes(t);
+          setLeaveType(t[0]);
+        }
+      })
+      .catch(() => {
+        /* keep the fallback types */
+      });
   }, []);
 
   // Days and hours are auto-derived (read-only) from the inputs.

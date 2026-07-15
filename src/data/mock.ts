@@ -80,7 +80,6 @@ export const MOCK_EMPLOYEE_TYPES: EmployeeType[] = [
 export const MOCK_ROLES: Role[] = [
   { id: 'r1', name: 'Employee', viewGroup: 'employee' },
   { id: 'r2', name: 'Contractor', viewGroup: 'employee' },
-  { id: 'r3', name: 'Approver', viewGroup: 'approver' },
   { id: 'r5', name: 'HR Administrator', viewGroup: 'admin' },
   { id: 'r6', name: 'Administrator', viewGroup: 'admin' },
 ];

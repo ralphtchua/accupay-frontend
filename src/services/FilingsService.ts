@@ -187,7 +187,7 @@ export interface NewOvertimeInput {
  * back as a 500 (full stack trace visible in the API console / Network tab).
  */
 function extractApiError(err: unknown): string {
-  const e = err as AxiosError<Record<string, string>>;
+  const e = err as AxiosError<Record<string, string> | string>;
   const status = e.response?.status;
   const data = e.response?.data;
   if (data && typeof data === "object") {
@@ -306,9 +306,9 @@ export async function getApprovalHistory(): Promise<Filing[]> {
   return (await getAllFilings()).filter((f) => f.status !== "Pending");
 }
 
-// The DB only accepts its own canonical status values (e.g. the declined
-// value is typically "Disapproved", not "Rejected"), so resolve the exact
-// string from the API's status list instead of hardcoding it. Cached per type.
+// The entity validates Status against a fixed set (Pending/Approved/Rejected).
+// We resolve the canonical status string from the statuslist (which now
+// advertises all three) with a hardcoded fallback for safety. Cached per type.
 let leaveStatusCache: string[] | null = null;
 let overtimeStatusCache: string[] | null = null;
 
@@ -346,7 +346,9 @@ function resolveDecisionStatus(
   }
   const needles = ["disapprov", "declin", "reject", "denied"];
   const m = list.find((s) => needles.some((n) => s.toLowerCase().includes(n)));
-  return m ?? "Disapproved";
+  // Falls back to the entity's constant (StatusRejected = "Rejected") on the
+  // off chance the statuslist lacks it.
+  return m ?? "Rejected";
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   getPermissions,
   updateRole,
   createRole,
+  deleteRole,
   getUsers,
   getUserRoles,
   saveUserRoles,
@@ -12,16 +13,28 @@ import {
   type ApiRolePermission,
   type ApiUser,
 } from '@/services/RolesService';
+import { resetUserPassword } from '@/services/AuthService';
 import { Card, Avatar } from '@/components/ui';
 import { Table, Td, EmptyState } from '@/components/page';
+import { Field, TextInput } from '@/components/form';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { ResetPasswordModal } from '@/components/ResetPasswordModal';
 import { useToast } from '@/components/Toast';
 
 /* =====================================================================
-   Roles & Permissions — two tabs:
-   • Role permissions: per-module Read/Create/Update/Delete matrix per role.
-   • User assignments: assign each user account a role (saves immediately).
-   Admin roles bypass the permission checks entirely.
+   Roles & Permissions — a role is a named bundle of permissions that
+   controls what an account can do (the backend gates every API call on
+   the role's Read/Create/Update/Delete flags per module; admin roles
+   bypass everything). Two tabs:
+   • Role permissions: per-module matrix per role, + create / delete role.
+   • User assignments: assign each account a role, + reset password.
    ===================================================================== */
+
+// Only admin roles are protected from deletion — removing the admin role would
+// lock out admin access. Everything else is deletable.
+function isProtectedRole(r: ApiRole): boolean {
+  return r.isAdmin;
+}
 
 type Flags = { read: boolean; create: boolean; update: boolean; delete: boolean };
 const FLAG_KEYS: (keyof Flags)[] = ['read', 'create', 'update', 'delete'];
@@ -56,6 +69,13 @@ export function RolesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingUser, setSavingUser] = useState<number | null>(null);
+  const [pwUser, setPwUser] = useState<ApiUser | null>(null);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ApiRole | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const activeRole = useMemo(
     () => roles.find((r) => r.id === activeId) ?? null,
@@ -124,16 +144,39 @@ export function RolesPage() {
     }
   }
 
-  async function addRole() {
-    const name = window.prompt('New role name');
-    if (!name?.trim()) return;
+  async function submitCreate() {
+    const name = newRoleName.trim();
+    if (!name) return;
+    setCreating(true);
     try {
-      const created = await createRole(name.trim());
+      const created = await createRole(name);
       await loadAll();
       setActiveId(created.id);
+      setCreateOpen(false);
+      setNewRoleName('');
       notify('Role created');
     } catch (e) {
       notify((e as Error).message || 'Could not create role');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function submitDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteRole(deleteTarget.id);
+      if (activeId === deleteTarget.id) {
+        setActiveId(roles.find((r) => r.id !== deleteTarget.id)?.id ?? null);
+      }
+      setDeleteTarget(null);
+      await loadAll();
+      notify('Role deleted');
+    } catch (e) {
+      notify((e as Error).message || 'Could not delete role');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -152,6 +195,20 @@ export function RolesPage() {
       notify((e as Error).message || 'Could not save assignment');
     } finally {
       setSavingUser(null);
+    }
+  }
+
+  async function submitReset(newPassword: string) {
+    if (!pwUser) return;
+    setPwSaving(true);
+    try {
+      await resetUserPassword(pwUser.id, newPassword);
+      notify(`Password reset for ${userName(pwUser)}`);
+      setPwUser(null);
+    } catch (e) {
+      notify((e as Error).message || 'Could not reset password');
+    } finally {
+      setPwSaving(false);
     }
   }
 
@@ -203,7 +260,7 @@ export function RolesPage() {
             {roles.length === 0 && (
               <div style={{ font: '400 12px var(--ao-font)', color: 'var(--ao-muted)' }}>No roles yet.</div>
             )}
-            <button className="ao-btn ao-btn--ghost" style={{ height: 40, marginTop: 4 }} onClick={addRole}>
+            <button className="ao-btn ao-btn--ghost" style={{ height: 40, marginTop: 4 }} onClick={() => setCreateOpen(true)}>
               + New role
             </button>
           </div>
@@ -212,14 +269,25 @@ export function RolesPage() {
           <div style={{ flex: 1, background: 'var(--ao-surface)', border: '1px solid var(--ao-border)', borderRadius: 14, padding: '22px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <div style={{ font: '700 15px var(--ao-font)' }}>Permissions — {activeRole?.name ?? ''}</div>
-              <button
-                className="ao-btn ao-btn--primary"
-                style={{ height: 38, padding: '0 18px', opacity: dirty && !saving ? 1 : 0.5, cursor: dirty && !saving ? 'pointer' : 'default' }}
-                disabled={!dirty || saving}
-                onClick={save}
-              >
-                {saving ? 'Saving…' : 'Save changes'}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {activeRole && !isProtectedRole(activeRole) && (
+                  <button
+                    className="ao-btn ao-btn--ghost"
+                    style={{ height: 38, padding: '0 14px', color: 'var(--ao-danger)', font: '600 13px var(--ao-font)' }}
+                    onClick={() => setDeleteTarget(activeRole)}
+                  >
+                    Delete role
+                  </button>
+                )}
+                <button
+                  className="ao-btn ao-btn--primary"
+                  style={{ height: 38, padding: '0 18px', opacity: dirty && !saving ? 1 : 0.5, cursor: dirty && !saving ? 'pointer' : 'default' }}
+                  disabled={!dirty || saving}
+                  onClick={save}
+                >
+                  {saving ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
             </div>
             <div style={{ font: '400 12px var(--ao-font)', color: 'var(--ao-muted-2)', marginBottom: 14 }}>
               Grant read/create/update/delete access per module.
@@ -263,7 +331,7 @@ export function RolesPage() {
           {users.length === 0 ? (
             <EmptyState message="No users found." />
           ) : (
-            <Table head={['User', 'Email', 'Role']}>
+            <Table head={['User', 'Email', 'Role', '']}>
               {users.map((u) => (
                 <tr key={u.id}>
                   <Td>
@@ -286,12 +354,70 @@ export function RolesPage() {
                       ))}
                     </select>
                   </Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <button
+                      onClick={() => setPwUser(u)}
+                      className="ao-btn ao-btn--ghost"
+                      style={{ height: 34, padding: '0 12px', font: '600 12px var(--ao-font)', whiteSpace: 'nowrap' }}
+                    >
+                      Reset password
+                    </button>
+                  </Td>
                 </tr>
               ))}
             </Table>
           )}
         </Card>
       )}
+
+      <ConfirmModal
+        open={createOpen}
+        title="New role"
+        width={420}
+        confirmLabel={creating ? 'Creating…' : 'Create role'}
+        confirmDisabled={!newRoleName.trim() || creating}
+        onCancel={() => { setCreateOpen(false); setNewRoleName(''); }}
+        onConfirm={submitCreate}
+        body={
+          <div style={{ marginTop: 4 }}>
+            <div style={{ font: '400 13px var(--ao-font)', color: 'var(--ao-muted)', marginBottom: 12 }}>
+              Creates an empty role — grant its permissions in the matrix afterward.
+            </div>
+            <Field label="Role name">
+              <TextInput
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                placeholder="e.g. HR Manager"
+              />
+            </Field>
+          </div>
+        }
+      />
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete role"
+        width={420}
+        confirmVariant="danger"
+        confirmLabel={deleting ? 'Deleting…' : 'Delete role'}
+        confirmDisabled={deleting}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={submitDelete}
+        body={
+          <div>
+            Delete the role <strong>{deleteTarget?.name}</strong>? Any account assigned this role
+            will lose its permissions. This can't be undone.
+          </div>
+        }
+      />
+
+      <ResetPasswordModal
+        open={!!pwUser}
+        subjectName={pwUser ? userName(pwUser) : ''}
+        saving={pwSaving}
+        onCancel={() => setPwUser(null)}
+        onSubmit={submitReset}
+      />
     </div>
   );
 }

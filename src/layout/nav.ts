@@ -24,11 +24,6 @@ export const NAV: Record<ViewGroup, NavNode[]> = {
     { kind: 'header', label: 'ACCOUNT' },
     { kind: 'item', label: 'My Profile', path: '/profile' },
   ],
-  approver: [
-    { kind: 'header', label: 'APPROVALS' },
-    { kind: 'item', label: 'Approvals', path: '/approvals' },
-    { kind: 'item', label: 'History', path: '/history' },
-  ],
   admin: [
     { kind: 'header', label: 'APPROVALS' },
     { kind: 'item', label: 'Approvals', path: '/approvals' },
@@ -38,6 +33,8 @@ export const NAV: Record<ViewGroup, NavNode[]> = {
     { kind: 'item', label: 'Roles & Permissions', path: '/roles' },
     { kind: 'header', label: 'SYSTEM' },
     { kind: 'item', label: 'Settings', path: '/settings' },
+    { kind: 'header', label: 'ACCOUNT' },
+    { kind: 'item', label: 'My Profile', path: '/profile' },
   ],
 };
 
@@ -53,7 +50,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/profile': 'My Profile',
   '/approvals': 'Approvals',
   '/history': 'Approval History',
-  '/employees': 'Employees & Contractors',
+  '/employees': 'Employees',
   '/roles': 'Roles & Permissions',
   '/settings': 'Settings',
 };
@@ -61,6 +58,5 @@ export const PAGE_TITLES: Record<string, string> = {
 /** Default landing route when switching into each view. */
 export const VIEW_DEFAULT_ROUTE: Record<ViewGroup, string> = {
   employee: '/dashboard',
-  approver: '/approvals',
   admin: '/approvals',
 };
