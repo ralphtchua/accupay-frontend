@@ -25,6 +25,18 @@ export function fmtLong(iso: string | null): string {
   return `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/** 'Jun 24, 2:15 PM' — compact date + time from an ISO datetime (or '—'). */
+export function fmtDateTimeShort(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${MON_SHORT[d.getMonth()]} ${d.getDate()}, ${h}:${m} ${ap}`;
+}
+
 /** '8:00am' — 12-hour time from 'HH:mm'. */
 export function fmtTime12(t?: string | null): string {
   if (!t) return '';

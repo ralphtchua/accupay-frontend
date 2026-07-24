@@ -4,9 +4,10 @@ import { getMyFilings } from "@/services/FilingsService";
 import {
   checkIn,
   checkOut,
-  getTodaysLogState,
+  getCheckInStatus,
   getMyTimeLogs,
   type TimeLogEntry,
+  type CheckStatus,
 } from "@/services/TimeLogsService";
 import { Chip, StatCard } from "@/components/ui";
 import { useToast } from "@/components/Toast";
@@ -55,18 +56,26 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   // Real check in/out against POST/PUT /api/self-service/timelogs; on load we
-  // restore an open check-in from GET /api/self-service/timelogs/employee, so
+  // restore an open check-in from GET /api/timelogs/employee, so
   // the state is fully backend-sourced and survives a refresh (no localStorage).
   const [checkedIn, setChecked] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
-  const [doneToday, setDoneToday] = useState(false); // already checked in + out today
+  const [doneToday, setDoneToday] = useState(false); // already used today's check-in
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(liveClock());
   const { isAuth } = useAuth();
 
   // This login can only clock in/out if it has a linked employee record.
   const canCheck = tokenService.getEmployeeId() != null;
+
+  // Reflect a backend check-in status in the button/tile state.
+  function applyStatus(s: CheckStatus) {
+    setChecked(s.state === "in");
+    setOpenId(s.state === "in" ? s.id : null);
+    setCheckInTime(s.state === "in" ? fmtClockTime(new Date(s.startISO)) : null);
+    setDoneToday(s.state === "done");
+  }
 
   // Load dashboard data once.
   useEffect(() => {
@@ -103,20 +112,13 @@ export function DashboardPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Restore today's check-in/out state from the backend (survives refresh, and
-  // enforces one check-in/out per day).
+  // Restore the check-in/out state from the backend (survives refresh, enforces
+  // one check-in/out per day, and resets a forgotten check-out after 20h).
   useEffect(() => {
     if (!isAuth || !canCheck) return;
     let alive = true;
-    getTodaysLogState().then((s) => {
-      if (!alive) return;
-      if (s.state === "open") {
-        setChecked(true);
-        setOpenId(s.id);
-        setCheckInTime(fmtClockTime(new Date(s.startISO)));
-      } else if (s.state === "done") {
-        setDoneToday(true);
-      }
+    getCheckInStatus().then((s) => {
+      if (alive) applyStatus(s);
     });
     return () => {
       alive = false;
@@ -170,7 +172,8 @@ export function DashboardPage() {
     };
     const fromFilings = filings.map((f) => ({
       key: `f-${f.id}`,
-      sortKey: `${f.filingDate}T00:00:00`,
+      // Sort by most-recent activity (decision/last change), not the filing date.
+      sortKey: f.updatedAt ?? f.createdAt ?? `${f.filingDate}T00:00:00`,
       label: filingLabel(f),
       status: f.status as string,
     }));
@@ -180,7 +183,8 @@ export function DashboardPage() {
       const outT = t.endTime ? fmtTime12(hhmm(t.endTime)) : "";
       return {
         key: `t-${t.id}`,
-        sortKey: t.startTime ?? `${day}T00:00:00`,
+        // Rank by the log's most recent event: check-out if present, else check-in.
+        sortKey: t.endTime ?? t.startTime ?? `${day}T00:00:00`,
         label: `Time Log - ${fmtTableDate(day)} ${inT}${outT ? `→${outT}` : " → in progress"}`,
         status: t.endTime ? "Logged" : "Active",
       };
@@ -202,10 +206,9 @@ export function DashboardPage() {
         notify("Checked in — have a great shift!");
       } else {
         if (openId != null) await checkOut(openId);
-        setOpenId(null);
-        setChecked(false);
-        setCheckInTime(null);
-        setDoneToday(true); // one check-in/out per day
+        // Re-derive: a same-day shift now blocks another check-in today, but a
+        // shift that started yesterday (overnight) frees today's check-in.
+        applyStatus(await getCheckInStatus());
         notify("Checked out — your time has been logged");
       }
     } catch (e) {
@@ -278,7 +281,7 @@ export function DashboardPage() {
             }}
           >
             {doneToday
-              ? "Checked out for today"
+              ? "Done for today"
               : checkedIn
                 ? `Checked in · ${checkInTime}`
                 : "Not checked in yet"}
@@ -289,7 +292,7 @@ export function DashboardPage() {
           disabled={busy || !canCheck || doneToday}
           title={
             doneToday
-              ? "You've already checked in and out today"
+              ? "You've already checked in today"
               : canCheck
                 ? ""
                 : "This login has no linked employee record."
@@ -309,7 +312,7 @@ export function DashboardPage() {
             cursor: busy || !canCheck || doneToday ? "default" : "pointer",
           }}
         >
-          {busy ? "…" : doneToday ? "Checked out" : checkedIn ? "Check Out" : "Check In"}
+          {busy ? "…" : doneToday ? "Done" : checkedIn ? "Check Out" : "Check In"}
         </button>
       </div>
 

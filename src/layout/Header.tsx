@@ -2,28 +2,28 @@ import { useLocation } from 'react-router-dom';
 import { Avatar } from '@/components/ui';
 import { PAGE_TITLES } from './nav';
 import { useCurrentUser } from '@/context/CurrentUserContext';
+import { profileIdentity } from '@/lib/identity';
 
 /* =====================================================================
    Header — 66px white bar: page title (left) + the signed-in user's
    identity (right). Access is strictly role-based, so there is no
-   "view as" switcher — each account only sees its own app.
+   "view as" switcher — each account only sees its own app. Employees
+   show their job title + employee ID; admins keep the role + org.
    ===================================================================== */
 
 export function Header() {
-  const { user, organization, role, loading } = useCurrentUser();
+  const { user, organization, role, employeeId, loading } = useCurrentUser();
   const location = useLocation();
   const title = PAGE_TITLES[location.pathname] ?? '';
 
-  // Real identity from the API (degrades gracefully while it loads).
-  const displayName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
-    user?.email ||
-    (loading ? 'Loading…' : 'Unknown user');
-  const roleLabel =
-    role?.name ?? (user?.type === 'Admin' ? 'Administrator' : 'Employee');
-  const identitySub = organization?.name
-    ? `${roleLabel} · ${organization.name}`
-    : roleLabel;
+  const id = profileIdentity(user, employeeId, role);
+  const displayName = id.name || (loading ? 'Loading…' : 'Unknown user');
+  // Employees: "Job Title · AO-00481". Admins: "Role · Organization".
+  const identitySub = id.isEmployee
+    ? [id.title, id.employeeId].filter(Boolean).join(' · ')
+    : organization?.name
+      ? `${id.roleLabel} · ${organization.name}`
+      : id.roleLabel;
 
   return (
     <header

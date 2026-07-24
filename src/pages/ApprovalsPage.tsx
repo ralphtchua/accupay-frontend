@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Filing } from '@/types/domain';
 import { decideFiling, getPendingApprovals } from '@/services/FilingsService';
+import { useCurrentUser } from '@/context/CurrentUserContext';
 import { Avatar, Card } from '@/components/ui';
-import { PageIntro, EmptyState } from '@/components/page';
+import { PageIntro, EmptyState, SearchBox } from '@/components/page';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
-import { fmtTableDate, fmtTime12 } from '@/lib/format';
+import { fmtTableDate, fmtTime12, fmtDateTimeShort } from '@/lib/format';
 
 /* =====================================================================
    Approvals — inbox of pending filings routed to the approver, each with
@@ -24,11 +25,13 @@ function summary(f: Filing): string {
 
 export function ApprovalsPage() {
   const { notify } = useToast();
+  const { user } = useCurrentUser();
   const [rows, setRows] = useState<Filing[]>([]);
   const [loading, setLoading] = useState(true);
   const [decision, setDecision] = useState<{ f: Filing; type: 'Approved' | 'Declined' } | null>(null);
   const [sortKey, setSortKey] = useState<'date' | 'name'>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [query, setQuery] = useState('');
 
   async function load() {
     setLoading(true);
@@ -42,8 +45,9 @@ export function ApprovalsPage() {
   }
   useEffect(() => { load(); }, []);
 
-  const sorted = useMemo(() => {
-    const copy = [...rows];
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const copy = rows.filter((f) => !q || f.employeeName.toLowerCase().includes(q));
     copy.sort((a, b) => {
       const cmp = sortKey === 'date'
         ? +new Date(a.filingDate) - +new Date(b.filingDate)
@@ -51,7 +55,7 @@ export function ApprovalsPage() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return copy;
-  }, [rows, sortKey, sortDir]);
+  }, [rows, query, sortKey, sortDir]);
 
   function toggleSort(key: 'date' | 'name') {
     if (sortKey === key) {
@@ -65,7 +69,7 @@ export function ApprovalsPage() {
   async function confirm() {
     if (!decision) return;
     try {
-      await decideFiling(decision.f, decision.type);
+      await decideFiling(decision.f, decision.type, user?.email ?? undefined);
       notify(decision.type === 'Approved' ? 'Filing approved' : 'Filing declined');
       setDecision(null);
       load();
@@ -78,13 +82,14 @@ export function ApprovalsPage() {
   const arrow = (key: 'date' | 'name') => (sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div style={{ maxWidth: 940 }}>
       <PageIntro
         title="Approvals"
         subtitle="Filings awaiting your decision."
         right={
           rows.length > 0 ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <SearchBox value={query} onChange={setQuery} placeholder="Search by name" width={190} />
               <span style={{ font: '600 11px var(--ao-font)', color: 'var(--ao-muted-2)', textTransform: 'uppercase', letterSpacing: '.5px' }}>Sort by</span>
               <button
                 className="ao-btn ao-btn--ghost"
@@ -109,9 +114,11 @@ export function ApprovalsPage() {
         <EmptyState message="Loading approvals…" />
       ) : rows.length === 0 ? (
         <Card><EmptyState message="You're all caught up — no pending filings." /></Card>
+      ) : shown.length === 0 ? (
+        <Card><EmptyState message={`No pending filings match "${query.trim()}".`} /></Card>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {sorted.map((f) => (
+          {shown.map((f) => (
             <Card key={f.id} style={{ padding: '16px 18px', borderLeft: `3px solid ${KIND_ACCENT[f.kind]}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
                 <Avatar name={f.employeeName} size={38} filled={false} />
@@ -121,6 +128,11 @@ export function ApprovalsPage() {
                   <div style={{ font: '400 12px var(--ao-font)', color: 'var(--ao-muted)', marginTop: 3 }}>
                     {fmtTableDate(f.filingDate)} · {f.reason}
                   </div>
+                  {f.createdAt && (
+                    <div style={{ font: '400 11px var(--ao-font)', color: 'var(--ao-muted-2)', marginTop: 2 }}>
+                      Requested {fmtDateTimeShort(f.createdAt)}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="ao-btn ao-btn--success" style={{ height: 38, padding: '0 16px', color: '#fff' }} onClick={() => setDecision({ f, type: 'Approved' })}>Approve</button>

@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Filing } from '@/types/domain';
 import { getMyLeaves, getMyLeaveBalances, type LeaveBalance } from '@/services/FilingsService';
 import { Card, Chip } from '@/components/ui';
-import { Table, Td, EmptyState } from '@/components/page';
+import { PageIntro, Table, Td, EmptyState, ItemPager, DateRangeFilter } from '@/components/page';
 import { fmtTableDate, fmtTime12 } from '@/lib/format';
 
 /* =====================================================================
-   My Leave Balances — matches the prototype: a row of simple balance
-   cards on top, then a "Leave requests" table logging every leave
-   filing (type, dates, days, hours, status).
+   My Leave Balances — a row of balance cards on top, then a "Leave
+   requests" table. The table shows 30 requests per page (newest first)
+   with older/newer arrows, plus an optional date-range filter.
    ===================================================================== */
+
+const PAGE_SIZE = 30;
 
 function BalanceCard({ b }: { b: LeaveBalance }) {
   return (
@@ -33,6 +35,10 @@ export function LeaveBalancesPage() {
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [leaves, setLeaves] = useState<Filing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [fromInput, setFromInput] = useState('');
+  const [toInput, setToInput] = useState('');
+  const [applied, setApplied] = useState<{ from: string; to: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -47,8 +53,27 @@ export function LeaveBalancesPage() {
     })();
   }, []);
 
+  // Date range filters client-side (leaves are already loaded, newest first).
+  const filtered = useMemo(() => {
+    if (!applied) return leaves;
+    return leaves.filter((l) => {
+      const d = (l.filingDate || '').slice(0, 10);
+      return (!applied.from || d >= applied.from) && (!applied.to || d <= applied.to);
+    });
+  }, [leaves, applied]);
+
+  const pageRows = useMemo(
+    () => filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE),
+    [filtered, page],
+  );
+
+  function apply() { setApplied({ from: fromInput, to: toInput }); setPage(0); }
+  function clear() { setFromInput(''); setToInput(''); setApplied(null); setPage(0); }
+
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div style={{ maxWidth: 940 }}>
+      <PageIntro title="My Leave Balances" subtitle="Your remaining leave credits and every leave request you've filed." />
+
       {balances.length > 0 ? (
         <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
           {balances.map((b) => <BalanceCard key={b.leaveType} b={b} />)}
@@ -61,15 +86,32 @@ export function LeaveBalancesPage() {
         )
       )}
 
-      <Card style={{ padding: '20px 22px' }}>
-        <div style={{ font: '700 15px var(--ao-font)', marginBottom: 12 }}>Leave requests</div>
+      <Card style={{ padding: '16px 22px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14, gap: 14, flexWrap: 'wrap' }}>
+          <DateRangeFilter
+            from={fromInput}
+            to={toInput}
+            onFrom={setFromInput}
+            onTo={setToInput}
+            onApply={apply}
+            onClear={clear}
+            active={applied != null}
+          />
+          <ItemPager
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={filtered.length}
+            onOlder={() => setPage((p) => p + 1)}
+            onNewer={() => setPage((p) => Math.max(0, p - 1))}
+          />
+        </div>
         {loading ? (
           <EmptyState message="Loading leave requests…" />
-        ) : leaves.length === 0 ? (
-          <EmptyState message="No leave requests yet." />
+        ) : filtered.length === 0 ? (
+          <EmptyState message={applied ? 'No leave requests in this date range.' : 'No leave requests yet.'} />
         ) : (
           <Table head={['Type', 'Dates', 'Days', 'Hours', 'Status']}>
-            {leaves.map((l) => (
+            {pageRows.map((l) => (
               <tr key={l.id}>
                 <Td style={{ fontWeight: 600, color: 'var(--ao-text)' }}>{l.leaveType ?? 'Leave'}</Td>
                 <Td>{leaveDates(l)}</Td>

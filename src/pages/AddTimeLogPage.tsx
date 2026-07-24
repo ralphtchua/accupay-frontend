@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TimeLogSubtype } from '@/types/domain';
-import { createTimeLogFiling } from '@/lib/api';
+import { createTimeLogFiling } from '@/services/TimeLogsService';
 import { Card } from '@/components/ui';
 import { Field, Select, TextInput, TextArea, EmailCallout } from '@/components/form';
 import { useToast } from '@/components/Toast';
@@ -26,10 +26,20 @@ export function AddTimeLogPage() {
     if (!(date && time && reason.trim())) { setErr('Please complete all fields.'); return; }
     setErr('');
     setBusy(true);
-    await createTimeLogFiling({ subtype, date, time, reason: reason.trim() });
-    setBusy(false);
-    notify('Time log filed — routed to your approver');
-    navigate('/myrequests');
+    try {
+      await createTimeLogFiling({
+        entryType: subtype === 'TIME IN' ? 'CheckIn' : 'CheckOut',
+        date,
+        time,
+        reason: reason.trim(),
+      });
+      notify('Time log filed — routed to your approver');
+      navigate('/myrequests');
+    } catch (e) {
+      setErr((e as Error).message || 'Could not file your time log.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

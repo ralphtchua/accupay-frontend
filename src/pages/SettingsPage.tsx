@@ -4,7 +4,7 @@ import {
   getSettings, saveSettings, runAccupaySync,
   getEmailTemplates, saveEmailTemplate, type EmailTemplate,
 } from '@/lib/api';
-import { EmptyState } from '@/components/page';
+import { PageIntro, EmptyState } from '@/components/page';
 import { Toggle, Field, TextInput, TextArea } from '@/components/form';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
@@ -84,7 +84,9 @@ export function SettingsPage() {
     : 'No sync yet.';
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div style={{ maxWidth: 940 }}>
+      <PageIntro title="Settings" subtitle="Organization defaults, approval routing, and Accupay integration." />
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
         {/* General */}
         <div style={CARD}>

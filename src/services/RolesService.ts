@@ -1,5 +1,5 @@
 import api from '@/config/AxiosConfig';
-import type { AxiosError } from 'axios';
+import { itemsOf, apiError } from '@/lib/apiUtils';
 
 /* =====================================================================
    RolesService — roles & permissions admin (real C# API).
@@ -45,29 +45,10 @@ export interface ApiUserRole {
   roleId: number;
 }
 
-function unwrapList<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) return payload as T[];
-  const p = payload as { items?: T[]; data?: T[] } | null;
-  return p?.items ?? p?.data ?? [];
-}
-
-function apiError(err: unknown): string {
-  const e = err as AxiosError<Record<string, string>>;
-  const data = e.response?.data;
-  if (data && typeof data === 'object') {
-    const msg = data.Error ?? data.error ?? data.title ?? data.message;
-    if (msg) return String(msg);
-  }
-  if (e.response?.status === 500) {
-    return 'Server error (500). Check the API console for the stack trace.';
-  }
-  return e.message || 'Request failed.';
-}
-
 /** All roles for the current client. */
 export async function getRoles(): Promise<ApiRole[]> {
   const { data } = await api.get('/api/roles', { params: { pageSize: 200 } });
-  return unwrapList<ApiRole>(data).map((r) => ({
+  return itemsOf<ApiRole>(data).map((r) => ({
     ...r,
     rolePermissions: r.rolePermissions ?? [],
   }));
@@ -76,7 +57,7 @@ export async function getRoles(): Promise<ApiRole[]> {
 /** The master list of permission modules. */
 export async function getPermissions(): Promise<ApiPermission[]> {
   const { data } = await api.get<unknown>('/api/permissions');
-  return unwrapList<ApiPermission>(data);
+  return itemsOf<ApiPermission>(data);
 }
 
 /** Replace a role's permissions (send the complete module list). */
@@ -117,13 +98,35 @@ export async function deleteRole(id: number): Promise<void> {
 /** All user accounts in the org. */
 export async function getUsers(): Promise<ApiUser[]> {
   const { data } = await api.get('/api/users', { params: { pageSize: 500 } });
-  return unwrapList<ApiUser>(data);
+  return itemsOf<ApiUser>(data);
+}
+
+export interface NewUserInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  employeeId: number;
+}
+
+/**
+ * Create a login account for an existing employee.
+ * POST /api/users (UserCreate). The backend creates the account with a default
+ * password and auto-sends an invitation ("set your password") email; set a
+ * temporary password afterward with resetUserPassword. Returns the new user id.
+ */
+export async function createUser(input: NewUserInput): Promise<ApiUser> {
+  try {
+    const { data } = await api.post<ApiUser>('/api/users', input);
+    return data;
+  } catch (err) {
+    throw new Error(apiError(err));
+  }
 }
 
 /** Current user→role assignments (only users that have a role). */
 export async function getUserRoles(): Promise<ApiUserRole[]> {
   const { data } = await api.get<unknown>('/api/roles/user-roles');
-  return unwrapList<ApiUserRole>(data);
+  return itemsOf<ApiUserRole>(data);
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   type CurrentRole,
 } from "@/services/AuthService";
 import { useView } from "@/layout/ViewContext";
+import { tokenService } from "@/services/TokenService";
 
 /* =====================================================================
    CurrentUserContext — loads the signed-in user's real identity from the
@@ -28,6 +29,8 @@ interface CurrentUserValue {
   user: User | null;
   organization: CurrentOrganization | null;
   role: CurrentRole | null;
+  /** The signed-in user's employee RowID from the JWT (null for admins). */
+  employeeId: number | null;
   /** The view group derived from the user's real role/type. */
   viewGroup: ViewGroup;
   loading: boolean;
@@ -87,6 +90,7 @@ export function CurrentUserProvider({ children }: { children: ReactNode }) {
         user,
         organization,
         role,
+        employeeId: tokenService.getEmployeeId(),
         viewGroup: toViewGroup(user, role),
         loading,
       }}

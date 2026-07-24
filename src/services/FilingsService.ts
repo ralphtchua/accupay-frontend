@@ -1,6 +1,6 @@
 import api from "@/config/AxiosConfig";
-import type { AxiosError } from "axios";
-import type { Filing, FilingStatus } from "@/types/domain";
+import { itemsOf, apiError } from "@/lib/apiUtils";
+import type { Filing, FilingStatus, TimeLogSubtype } from "@/types/domain";
 import { tokenService } from "@/services/TokenService";
 
 /* =====================================================================
@@ -21,6 +21,11 @@ interface OvertimeApiDto {
   endDate?: string | null;
   status?: string;
   reason?: string;
+  created?: string | null; // audit — filed at
+  lastUpd?: string | null; // audit — last changed / decided at
+  createdBy?: number | null; // user id who filed
+  lastUpdBy?: number | null; // user id who last decided in-app
+  approverEmail?: string | null; // who decided via the email link
 }
 
 interface LeaveApiDto {
@@ -34,20 +39,15 @@ interface LeaveApiDto {
   endDate?: string | null;
   status?: string;
   reason?: string;
-}
-
-/**
- * The API returns PaginatedList<T> which serializes as { items, totalCount }.
- * Parse defensively so a plain array or a { data } wrapper also works.
- */
-function itemsOf<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) return payload as T[];
-  const p = payload as { items?: T[]; data?: T[]; results?: T[] } | null;
-  return p?.items ?? p?.data ?? p?.results ?? [];
+  created?: string | null; // audit — filed at
+  lastUpd?: string | null; // audit — last changed / decided at
+  createdBy?: number | null; // user id who filed
+  lastUpdBy?: number | null; // user id who last decided in-app
+  approverEmail?: string | null; // who decided via the email link
 }
 
 /** Map the API's status strings onto the app's three filing statuses. */
-function normalizeStatus(s?: string): FilingStatus {
+function normalizeStatus(s?: string | null): FilingStatus {
   const v = (s ?? "").toLowerCase();
   if (v.includes("approve")) return "Approved";
   if (v.includes("declin") || v.includes("reject") || v.includes("disapprove")) {
@@ -58,6 +58,20 @@ function normalizeStatus(s?: string): FilingStatus {
 
 function datePart(dt?: string | null): string {
   return dt ? dt.split("T")[0] : "";
+}
+
+/**
+ * Treat an empty or default/min datetime as absent. The backend currently
+ * ships the audit DTO fields unset, so `Created` comes back as
+ * "0001-01-01T00:00:00" (DateTime.MinValue) and `LastUpd` as null. Returning
+ * undefined for those makes the UI show "—" and lets sorting fall back to a
+ * real date, and it auto-corrects once the backend populates the fields.
+ */
+function realDate(dt?: string | null): string | undefined {
+  if (!dt) return undefined;
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime()) || d.getUTCFullYear() <= 1) return undefined;
+  return dt;
 }
 
 function timePart(dt?: string | null): string | undefined {
@@ -91,6 +105,11 @@ function mapOvertime(dto: OvertimeApiDto): Filing {
     hours: hoursBetween(dto.startTime, dto.endTime),
     reason: dto.reason ?? "",
     status: normalizeStatus(dto.status),
+    createdAt: realDate(dto.created),
+    updatedAt: realDate(dto.lastUpd) ?? realDate(dto.created),
+    createdById: dto.createdBy || null,
+    updatedById: dto.lastUpdBy || null,
+    approverEmail: dto.approverEmail || null,
   };
 }
 
@@ -107,22 +126,100 @@ function mapLeave(dto: LeaveApiDto): Filing {
     days: daysBetween(dto.startDate, dto.endDate),
     reason: dto.reason ?? "",
     status: normalizeStatus(dto.status),
+    createdAt: realDate(dto.created),
+    updatedAt: realDate(dto.lastUpd) ?? realDate(dto.created),
+    createdById: dto.createdBy || null,
+    updatedById: dto.lastUpdBy || null,
+    approverEmail: dto.approverEmail || null,
   };
 }
 
+/* Time-log correction filings — GET /api/self-service/timelogs (paged, needs a
+   date range). Note this DTO carries no id or audit timestamps, so these rows
+   are read-only in My Requests (no "By"/decided date, not decidable here). */
+interface TimelogFilingApiDto {
+  entryType?: string | null; // 'CheckIn' | 'CheckOut'
+  logDate?: string | null; // ISO date of the correction
+  time?: string | null; // corrected clock time
+  employee?: { firstName?: string; middleName?: string; lastName?: string } | null;
+  reason?: string | null;
+  status?: string | null; // Pending | Approved | Rejected
+  approverEmail?: string | null;
+}
+
 /**
- * All of the signed-in employee's filings (overtime + leave), merged and
- * sorted most-recent-first.
+ * Pull 'HH:mm' from the DTO's `time`. The backend field is a TimeSpan; depending
+ * on how it's serialized it can arrive as 'HH:mm:ss', 'HH:mm', or an ISO
+ * date-time — and on netcoreapp3.1 System.Text.Json may not stringify a TimeSpan
+ * at all, so we defensively bail on any non-string value rather than crash.
+ */
+function timeOfDay(t?: string | null): string | undefined {
+  if (typeof t !== "string" || !t) return undefined;
+  const s = t.includes("T") ? t.split("T")[1] : t;
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : undefined;
+}
+
+function mapTimelogFiling(dto: TimelogFilingApiDto, i: number): Filing {
+  const subtype: TimeLogSubtype = dto.entryType === "CheckOut" ? "TIME OUT" : "TIME IN";
+  const date = datePart(dto.logDate);
+  const name = [dto.employee?.firstName, dto.employee?.middleName, dto.employee?.lastName]
+    .filter(Boolean)
+    .join(" ");
+  return {
+    // No backend id on this DTO — synthesize a stable-enough key for React.
+    id: `tl-${date}-${i}`,
+    employeeId: "",
+    employeeName: name,
+    kind: "TimeLog",
+    timelogSubtype: subtype,
+    filingDate: date,
+    startTime: timeOfDay(dto.time),
+    reason: dto.reason ?? "",
+    status: normalizeStatus(dto.status),
+    createdById: null,
+    updatedById: null,
+    approverEmail: dto.approverEmail || null,
+  };
+}
+
+/** A wide date window so the paged filings endpoint returns the full history. */
+function wideRange(): { from: string; to: string } {
+  const now = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  const ymd = (d: Date) => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return {
+    from: ymd(new Date(now.getFullYear() - 6, now.getMonth(), now.getDate())),
+    to: ymd(new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())),
+  };
+}
+
+/** The signed-in employee's time-log correction filings. */
+export async function getMyTimelogFilings(): Promise<Filing[]> {
+  const { from, to } = wideRange();
+  const { data } = await api.get("/api/self-service/timelogs", {
+    params: { dateFrom: from, dateTo: to, pageSize: 500 },
+  });
+  return itemsOf<TimelogFilingApiDto>(data).map(mapTimelogFiling);
+}
+
+/**
+ * All of the signed-in employee's filings (overtime + leave + time-log
+ * corrections), merged and sorted most-recent-first. The time-log fetch is
+ * isolated so a failure there (the endpoint is newer / may error) can't wipe out
+ * the overtime and leave rows.
  */
 export async function getMyFilings(): Promise<Filing[]> {
-  const [otRes, lvRes] = await Promise.all([
+  const [otRes, lvRes, tlFilings] = await Promise.all([
     api.get("/api/self-service/overtimes", { params: { pageSize: 200 } }),
     api.get("/api/self-service/leaves", { params: { pageSize: 200 } }),
+    getMyTimelogFilings().catch(() => [] as Filing[]),
   ]);
 
   const filings: Filing[] = [
     ...itemsOf<OvertimeApiDto>(otRes.data).map(mapOvertime),
     ...itemsOf<LeaveApiDto>(lvRes.data).map(mapLeave),
+    ...tlFilings,
   ];
 
   return filings.sort((a, b) =>
@@ -182,28 +279,6 @@ export interface NewOvertimeInput {
 }
 
 /**
- * Pull a human-readable message out of an API error. The backend returns
- * business-rule failures as HTTP 400 { Error: "..." }; unhandled ones come
- * back as a 500 (full stack trace visible in the API console / Network tab).
- */
-function extractApiError(err: unknown): string {
-  const e = err as AxiosError<Record<string, string> | string>;
-  const status = e.response?.status;
-  const data = e.response?.data;
-  if (data && typeof data === "object") {
-    const msg = data.Error ?? data.error ?? data.title ?? data.message;
-    if (msg) return String(msg);
-  }
-  if (typeof data === "string" && data.trim() && data.length < 300) {
-    return data.trim();
-  }
-  if (status === 500) {
-    return "Server error (500). Check the API console for the stack trace.";
-  }
-  return e.message || "Request failed.";
-}
-
-/**
  * File an overtime request for the signed-in employee.
  * The API's SelfServiceCreateOvertimeDto wants DateTimes; it only reads the
  * time-of-day from StartTime/EndTime, so we combine them with the date.
@@ -222,7 +297,7 @@ export async function createOvertime(input: NewOvertimeInput): Promise<Filing> {
     );
     return mapOvertime(data);
   } catch (err) {
-    throw new Error(extractApiError(err));
+    throw new Error(apiError(err));
   }
 }
 
@@ -273,7 +348,7 @@ export async function createLeave(input: NewLeaveInput): Promise<Filing> {
     );
     return mapLeave(data);
   } catch (err) {
-    throw new Error(extractApiError(err));
+    throw new Error(apiError(err));
   }
 }
 
@@ -306,88 +381,51 @@ export async function getApprovalHistory(): Promise<Filing[]> {
   return (await getAllFilings()).filter((f) => f.status !== "Pending");
 }
 
-// The entity validates Status against a fixed set (Pending/Approved/Rejected).
-// We resolve the canonical status string from the statuslist (which now
-// advertises all three) with a hardcoded fallback for safety. Cached per type.
-let leaveStatusCache: string[] | null = null;
-let overtimeStatusCache: string[] | null = null;
-
-async function statusListFor(kind: Filing["kind"]): Promise<string[]> {
-  try {
-    if (kind === "Leave") {
-      if (!leaveStatusCache) {
-        const { data } = await api.get("/api/self-service/leaves/leave-statuses");
-        leaveStatusCache = Array.isArray(data) ? (data as string[]) : [];
-      }
-      return leaveStatusCache;
-    }
-    if (!overtimeStatusCache) {
-      const { data } = await api.get("/api/overtimes/statuslist");
-      overtimeStatusCache = Array.isArray(data) ? (data as string[]) : [];
-    }
-    return overtimeStatusCache;
-  } catch {
-    return [];
-  }
+/** The API path segment for a filing kind (Overtime/Leave only). */
+function filingBase(kind: Filing["kind"]): "overtimes" | "leaves" | null {
+  return kind === "Overtime" ? "overtimes" : kind === "Leave" ? "leaves" : null;
 }
-
-/** Pick the backend's canonical status string for the chosen decision. */
-function resolveDecisionStatus(
-  list: string[],
-  decision: "Approved" | "Declined",
-): string {
-  if (decision === "Approved") {
-    // "approv" but not "disapprov"
-    const m = list.find((s) => {
-      const l = s.toLowerCase();
-      return l.includes("approv") && !l.includes("disapprov");
-    });
-    return m ?? "Approved";
-  }
-  const needles = ["disapprov", "declin", "reject", "denied"];
-  const m = list.find((s) => needles.some((n) => s.toLowerCase().includes(n)));
-  // Falls back to the entity's constant (StatusRejected = "Rejected") on the
-  // off chance the statuslist lacks it.
-  return m ?? "Rejected";
-}
+const filingId = (f: Filing) => f.id.replace(/^(ot|lv)-/, "");
 
 /**
- * Approve or decline a filing by re-sending its record with a new status.
- * The Update DTOs require the full record, so we rebuild it from the filing,
- * and we use the API's own canonical status value (see resolveDecisionStatus).
+ * Approve or reject a pending filing via the dedicated endpoints, which also
+ * record who decided it: on approve we pass the admin's email, surfaced as the
+ * "By" column. Only Overtime and Leave are decided here (TimeLog filings aren't
+ * listable in the admin views yet). Reject takes no body — the backend doesn't
+ * record the rejecter yet.
  */
 export async function decideFiling(
   f: Filing,
   decision: "Approved" | "Declined",
+  approverEmail?: string,
 ): Promise<void> {
+  const base = filingBase(f.kind);
+  if (!base) throw new Error("This filing type can't be decided here.");
+  const id = filingId(f);
   try {
-    const status = resolveDecisionStatus(await statusListFor(f.kind), decision);
-    if (f.kind === "Overtime") {
-      await api.put(`/api/overtimes/${f.id.replace(/^ot-/, "")}`, {
-        status,
-        startDate: `${f.filingDate}T00:00:00`,
-        startTime: `${f.filingDate}T${f.startTime ?? "00:00"}:00`,
-        endTime: `${f.filingDate}T${f.endTime ?? "00:00"}:00`,
-        reason: f.reason,
-        comments: "",
-      });
-      return;
+    if (decision === "Approved") {
+      await api.post(`/api/${base}/filings/${id}/approve`, { approverEmail: approverEmail ?? null });
+    } else {
+      await api.post(`/api/${base}/filings/${id}/reject`, {});
     }
-    if (f.kind === "Leave") {
-      const body: Record<string, unknown> = {
-        leaveType: f.leaveType ?? "",
-        status,
-        startDate: `${f.filingDate}T00:00:00`,
-        reason: f.reason,
-        comments: "",
-      };
-      if (f.startTime) body.startTime = `${f.filingDate}T${f.startTime}:00`;
-      if (f.endTime) body.endTime = `${f.filingDate}T${f.endTime}:00`;
-      await api.put(`/api/leaves/${f.id.replace(/^lv-/, "")}`, body);
-      return;
-    }
-    throw new Error("This filing type can't be decided here.");
   } catch (err) {
-    throw new Error(extractApiError(err));
+    throw new Error(apiError(err));
+  }
+}
+
+/**
+ * Email this filing's assigned approvers (self-serve endpoint). Overtime/Leave
+ * only. NOTE: the endpoint is still `[Permission(...Update)]`-gated on the
+ * backend, so a plain Selfserve employee gets 403 — it needs Jesse to un-gate
+ * the self-serve `send-approval-email` endpoints before this can be surfaced to
+ * employees. Kept ready for that. Also inert until SMTP is configured.
+ */
+export async function sendFilingApprovalEmail(f: Filing): Promise<void> {
+  const base = filingBase(f.kind);
+  if (!base) throw new Error("Can't send an approval email for this filing type.");
+  try {
+    await api.post(`/api/self-service/${base}/filings/${filingId(f)}/send-approval-email`);
+  } catch (err) {
+    throw new Error(apiError(err, "Could not send the approval email."));
   }
 }

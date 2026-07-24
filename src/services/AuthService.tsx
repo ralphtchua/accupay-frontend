@@ -20,9 +20,25 @@ export async function Auth(email: string, password: string) {
     throw new Error(e.response?.data?.ErrorType ?? "Invalid email or password");
   }
 }
-export async function getCurrentEmployee() {
-  const response = await api.get<User>(`${API_BASE}`);
-  return response.data;
+/** Raw account payload — the extra identity fields are optional until the
+    backend exposes them on GET /api/account (see GetInformation). */
+interface AccountApiDto extends User {
+  employeeNumber?: string | null;
+  position?: string | { name?: string } | null;
+}
+
+export async function getCurrentEmployee(): Promise<User> {
+  const { data } = await api.get<AccountApiDto>(`${API_BASE}`);
+  const title =
+    data.title ??
+    (typeof data.position === "string" ? data.position : data.position?.name) ??
+    null;
+  return {
+    ...data,
+    employeeNo: data.employeeNo ?? data.employeeNumber ?? null,
+    title,
+    employeeType: data.employeeType ?? null,
+  };
 }
 
 export interface CurrentOrganization {

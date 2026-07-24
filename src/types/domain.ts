@@ -108,6 +108,11 @@ export interface Filing {
   hours?: number;
   reason: string;
   status: FilingStatus;
+  createdAt?: string;  // ISO — when the filing was created (backend Created)
+  updatedAt?: string;  // ISO — last change / decision time (backend LastUpd)
+  createdById?: number | null; // backend CreatedBy (user id who filed)
+  updatedById?: number | null; // backend LastUpdBy (user id who last decided in-app)
+  approverEmail?: string | null; // who decided via the email link (LastUpdBy is null then)
 }
 
 export interface LeaveBalance {

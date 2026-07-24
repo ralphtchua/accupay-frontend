@@ -1,10 +1,54 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 
+/**
+ * Content-Security-Policy for the built app. Injected as a <meta> tag at BUILD
+ * time only — the dev server (HMR) relies on inline scripts + eval + a ws
+ * connection, which a strict policy would break, so we deliberately don't apply
+ * it to `vite dev`.
+ *
+ * script-src is 'self' with no 'unsafe-inline'/'unsafe-eval' — the production
+ * bundle emits a single external module script and no inline scripts, so nothing
+ * is blocked. style-src keeps 'unsafe-inline' (React sets element styles via the
+ * DOM style property, which CSP doesn't govern, but this stays permissive for
+ * any runtime <style>) and allows the Google Fonts stylesheet; font files come
+ * from fonts.gstatic.com. All API calls are same-origin (Vite proxy in dev, SPA
+ * middleware in prod), so connect-src 'self' is sufficient — add the API origin
+ * here if it's ever served from a different host.
+ *
+ * Note: frame-ancestors / X-Frame-Options must be sent as a real HTTP header by
+ * the host (it's ignored inside a <meta> CSP), so clickjacking protection is a
+ * server-side follow-up.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+function cspMeta(): Plugin {
+  return {
+    name: "inject-csp-meta",
+    apply: "build",
+    transformIndexHtml(html) {
+      return html.replace(
+        "</title>",
+        `</title>\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
+      );
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), cspMeta()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

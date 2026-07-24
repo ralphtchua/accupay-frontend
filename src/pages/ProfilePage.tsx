@@ -6,11 +6,11 @@ import { Field, TextInput } from '@/components/form';
 import { useToast } from '@/components/Toast';
 import { useCurrentUser } from '@/context/CurrentUserContext';
 import { changePassword } from '@/services/AuthService';
+import { profileIdentity } from '@/lib/identity';
 
 /* =====================================================================
    My Profile — real account identity from GET /api/account (+ org/role).
-   Employment details (phone, employee ID, hire date) and password change
-   have no self-service endpoint yet, so they're intentionally omitted.
+   Employees see their job title + employee ID; admins see role + type.
    ===================================================================== */
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -24,7 +24,7 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function ProfilePage() {
   const { notify } = useToast();
-  const { user, organization, role, loading } = useCurrentUser();
+  const { user, organization, role, employeeId, loading } = useCurrentUser();
   const [pwOpen, setPwOpen] = useState(false);
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
@@ -32,11 +32,13 @@ export function ProfilePage() {
 
   if (loading && !user) return <EmptyState message="Loading profile…" />;
 
-  const name =
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
-    user?.email ||
-    '—';
+  const id = profileIdentity(user, employeeId, role);
+  const name = id.name || '—';
   const roleName = role?.name ?? user?.type ?? '—';
+  // Employees: "Job Title · AO-00481". Admins: "Role · Organization".
+  const identitySub = id.isEmployee
+    ? [id.title, id.employeeId].filter(Boolean).join(' · ')
+    : `${roleName}${organization?.name ? ` · ${organization.name}` : ''}`;
 
   const tooShort = next.length > 0 && next.length < 8;
   const mismatch = confirm.length > 0 && next !== confirm;
@@ -64,15 +66,27 @@ export function ProfilePage() {
           <div>
             <div style={{ font: '700 19px var(--ao-font)' }}>{name}</div>
             <div style={{ font: '400 13px var(--ao-font)', color: 'var(--ao-muted)' }}>
-              {roleName}{organization?.name ? ` · ${organization.name}` : ''}
+              {identitySub || '—'}
             </div>
           </div>
         </div>
 
-        <Row label="Email" value={user?.email ?? '—'} />
-        <Row label="Role" value={roleName} />
-        <Row label="Account type" value={user?.type ?? '—'} />
-        <Row label="Organization" value={organization?.name ?? '—'} />
+        {id.isEmployee ? (
+          <>
+            <Row label="Employee ID" value={id.employeeId ?? '—'} />
+            <Row label="Title" value={id.title ?? '—'} />
+            {user?.employeeType && <Row label="Employment type" value={user.employeeType} />}
+            <Row label="Email" value={user?.email ?? '—'} />
+            <Row label="Organization" value={organization?.name ?? '—'} />
+          </>
+        ) : (
+          <>
+            <Row label="Email" value={user?.email ?? '—'} />
+            <Row label="Role" value={roleName} />
+            <Row label="Account type" value={user?.type ?? '—'} />
+            <Row label="Organization" value={organization?.name ?? '—'} />
+          </>
+        )}
 
         <button className="ao-btn ao-btn--ghost" style={{ height: 42, padding: '0 18px', marginTop: 18 }} onClick={() => setPwOpen(true)}>
           Change password

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.png";
 import { Auth } from "@/services/AuthService";
@@ -7,7 +7,8 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  async function signIn() {
+  async function signIn(e?: FormEvent) {
+    e?.preventDefault();
     if (!email || !password) {
       alert("Please enter both email and password.");
       return;
@@ -76,56 +77,51 @@ export function LoginPage() {
           Time &amp; Attendance System
         </div>
 
-        <div style={{ textAlign: "left", marginBottom: 14 }}>
-          <label className="ao-label">Email</label>
-          <input
-            className="ao-input"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-        <div style={{ textAlign: "left", marginBottom: 22 }}>
-          <label className="ao-label">Password</label>
-          <input
-            className="ao-input"
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && signIn()}
-          />
-        </div>
+        <form onSubmit={signIn}>
+          <div style={{ textAlign: "left", marginBottom: 14 }}>
+            <label className="ao-label" htmlFor="login-email">Email</label>
+            <input
+              id="login-email"
+              name="email"
+              className="ao-input"
+              type="email"
+              autoComplete="username"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div style={{ textAlign: "left", marginBottom: 22 }}>
+            <label className="ao-label" htmlFor="login-password">Password</label>
+            <input
+              id="login-password"
+              name="password"
+              className="ao-input"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
 
-        <button
-          onClick={signIn}
-          className="ao-btn ao-btn--primary"
-          style={{ width: "100%", height: 44 }}
-        >
-          Sign In
-        </button>
+          <button
+            type="submit"
+            className="ao-btn ao-btn--primary"
+            style={{ width: "100%", height: 44 }}
+          >
+            Sign In
+          </button>
+        </form>
 
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
             marginTop: 16,
-            font: "500 12px var(--ao-font)",
+            font: "400 12px var(--ao-font)",
+            color: "var(--ao-muted)",
           }}
         >
-          <span style={{ color: "var(--ao-muted)", cursor: "pointer" }}>
-            Forgot password?
-          </span>
-          <span
-            style={{
-              color: "var(--ao-primary)",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Register
-          </span>
+          Forgot your password? Contact your administrator.
         </div>
       </div>
     </div>

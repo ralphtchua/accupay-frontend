@@ -30,6 +30,7 @@ export const NAV: Record<ViewGroup, NavNode[]> = {
     { kind: 'item', label: 'History', path: '/history' },
     { kind: 'header', label: 'PEOPLE' },
     { kind: 'item', label: 'Employees', path: '/employees' },
+    { kind: 'item', label: 'Approvers', path: '/approvers' },
     { kind: 'item', label: 'Roles & Permissions', path: '/roles' },
     { kind: 'header', label: 'SYSTEM' },
     { kind: 'item', label: 'Settings', path: '/settings' },
@@ -51,6 +52,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/approvals': 'Approvals',
   '/history': 'Approval History',
   '/employees': 'Employees',
+  '/approvers': 'Approvers',
   '/roles': 'Roles & Permissions',
   '/settings': 'Settings',
 };

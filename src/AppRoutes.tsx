@@ -13,6 +13,7 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { ApprovalsPage } from '@/pages/ApprovalsPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
+import { ApproversPage } from '@/pages/ApproversPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 
@@ -40,6 +41,7 @@ export function AppRoutes() {
         <Route path="/approvals" element={<ApprovalsPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/employees" element={<EmployeesPage />} />
+        <Route path="/approvers" element={<ApproversPage />} />
         <Route path="/roles" element={<RolesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<RoleLanding />} />
